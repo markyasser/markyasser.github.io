@@ -1,12 +1,13 @@
 {
   "name": "mark-portfolio-3d",
   "version": "1.0.0",
-  "description": "Interactive 3D driving résumé",
+  "description": "Interactive 3D driving r\u00e9sum\u00e9",
   "main": "index.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173",
+    "build:artifact": "vite build && node scripts/build-artifact.mjs"
   },
   "keywords": [],
   "author": "",

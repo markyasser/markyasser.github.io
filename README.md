@@ -55,6 +55,10 @@ anything, so it drops onto any static host:
   `vite.config.js` means it already works from a project sub-path.
 - **Cloudflare Pages** — build command `npm run build`, output directory `dist`.
 
+`npm run build:artifact` additionally emits `dist/artifact.html` — the same page
+reshaped for a host that supplies its own `<html>` wrapper, with the stylesheet
+inlined. Only needed for publishing to Claude Artifacts; ignore it otherwise.
+
 ## Updating the CV
 
 Everything the world displays comes from [`src/data.js`](src/data.js) — jobs,
