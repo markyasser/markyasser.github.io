@@ -7,8 +7,10 @@ import { Breakables } from './breakables.js'
 import {
   crateTexture, statTexture, labelTexture, groundTexture, skyTexture,
   containerSideTexture, containerTopTexture, containerEndTexture, bannerTexture,
+  languageFlagTexture,
 } from './textures.js'
-import { PROFILE, EXPERIENCE, EDUCATION, SKILL_GROUPS, STATS, CONTACT_LINKS, SHARD_FACTS } from './data.js'
+import { brandColor } from './logos.js'
+import { PROFILE, EXPERIENCE, EDUCATION, SKILL_GROUPS, STATS, CONTACT_LINKS, LANGUAGES, SHARD_FACTS } from './data.js'
 
 export const WORLD_SIZE = 224
 export const BOUNDS = 94
@@ -198,12 +200,12 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
    */
   function addContainer({
     x, z, rotY = 0, length = 9, height = 3, width = 3,
-    mass = 180, title, sub = '', meta = '', items = [], color, accent,
+    mass = 180, title, sub = '', meta = '', items = [], marks = false, org = '', color, accent,
   }) {
     const hexColor = hex(color)
     const group = P.container({
-      side: containerSideTexture(renderer, { title, sub, meta, color: hexColor }),
-      top: containerTopTexture(renderer, { title, items, color: hexColor }),
+      side: containerSideTexture(renderer, { title, sub, meta, org, color: hexColor }),
+      top: containerTopTexture(renderer, { title, items, marks, org, color: hexColor }),
       end: containerEndTexture(renderer, { color: hexColor }),
       length, height, width, accent,
     })
@@ -227,9 +229,9 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   }
 
   /** A banner on a pole. Marks a zone, and folds flat when you clip it. */
-  function addFlag({ x, z, rotY = 0, title, color, height = 5.2 }) {
+  function addFlag({ x, z, rotY = 0, title, color, texture, height = 5.2 }) {
     const group = P.bannerFlag({
-      texture: bannerTexture(renderer, { title, color: hex(color) }),
+      texture: texture || bannerTexture(renderer, { title, color: hex(color) }),
       poleHeight: height,
     })
     group.position.set(x, height / 2, z)
@@ -303,7 +305,9 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       title: job.company,
       sub: job.role,
       meta: job.period,
+      org: job.logo,
       items: job.tags.slice(0, 4),
+      marks: true,
       color: job.accent,
       accent: C.navy,
     })
@@ -313,6 +317,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       x: x - facing * 5.5, z: z + 1.5, rotY: Math.PI / 2, length: 7, height: 2.4, width: 2.6, mass: 80,
       title: 'Stack',
       items: job.tags,
+      marks: true,
       color: C.navyLight,
       accent: job.accent,
     })
@@ -395,6 +400,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       x: gx, z: gz + 7.5, length: 9, height: 2.5, width: 2.6, mass: 90,
       title: group.label,
       items: group.items,
+      marks: true,
       color: group.color,
       accent: C.navy,
     })
@@ -417,7 +423,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     rows.forEach((row, r) => {
       row.forEach((item, c) => {
         const ox = (c - (row.length - 1) / 2) * pitch
-        const mesh = P.crate({ texture: crateTexture(renderer, { label: item, color: hex(group.color) }), size })
+        const mesh = P.crate({ texture: crateTexture(renderer, { label: item, color: brandColor(item) }), size })
         const pos = { x: gx + ox, y: 0.1 + size / 2 + r * (size + 0.04), z: gz }
         mesh.position.set(pos.x, pos.y, pos.z)
         mesh.rotation.y = (c * 0.09 - 0.1) * (r + 1)
@@ -448,6 +454,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       title: EDUCATION.school,
       sub: EDUCATION.degree,
       meta: EDUCATION.period,
+      org: 'cairo',
       items: [EDUCATION.grade],
       color: C.violet,
       accent: C.navy,
@@ -481,6 +488,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     dynamics.push({ mesh: cap, body: capBody })
 
     addFlag({ x: cx + 10, z: cz + 7, title: 'EDUCATION', color: C.violet })
+    buildLanguages(cx, cz + 19)
 
     addPOI({
       id: 'education',
@@ -494,6 +502,19 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     addLabel('EDUCATION', new THREE.Vector3(cx, 10, cz), { height: 1.1, bg: 'rgba(143,131,247,0.95)' })
   }
 
+  /** Spoken languages, as country flags on poles beside the university. */
+  function buildLanguages(cx, cz) {
+    LANGUAGES.forEach((lang, i) => {
+      addFlag({
+        x: cx + (i - (LANGUAGES.length - 1) / 2) * 7,
+        z: cz,
+        title: lang.language,
+        texture: languageFlagTexture(renderer, lang),
+      })
+    })
+    addLabel('LANGUAGES', new THREE.Vector3(cx, 8, cz), { height: 0.85, bg: 'rgba(63,201,191,0.95)' })
+  }
+
   // --- Contact -----------------------------------------------------------
   function buildContactPlaza() {
     const { x: cx, z: cz } = ZONES.contact
@@ -505,6 +526,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
         x, z: cz - 4, rotY: 0, length: 10, height: 3, width: 3, mass: 130,
         title: link.label,
         sub: link.sub,
+        org: link.id === 'email' ? 'email' : link.id,
         items: [link.sub],
         color,
         accent: C.navy,

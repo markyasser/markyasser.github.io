@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { CSS } from './palette.js'
+import { drawMark, drawOrgMark, drawFlag, markKey, brandColor } from './logos.js'
 
 const FONT_STACK = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 const cache = new Map()
@@ -61,7 +62,10 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath()
 }
 
-/** A skill crate face — coloured square with the skill name across it. */
+/**
+ * A skill crate face: the mark large, the name small underneath. The logo does
+ * the recognising at a distance; the caption settles it up close.
+ */
 export function crateTexture(renderer, { label, color }) {
   const key = `crate|${label}|${color}`
   if (cache.has(key)) return cache.get(key)
@@ -75,28 +79,32 @@ export function crateTexture(renderer, { label, color }) {
 
   // Plank shading gives the cube a crate-like read at a glance.
   ctx.fillStyle = 'rgba(0,0,0,0.10)'
-  ctx.fillRect(0, 0, size, 46)
-  ctx.fillRect(0, size - 46, size, 46)
-  ctx.fillStyle = 'rgba(255,255,255,0.14)'
-  ctx.fillRect(0, 46, size, 10)
-
-  ctx.strokeStyle = 'rgba(0,0,0,0.22)'
+  ctx.fillRect(0, 0, size, 40)
+  ctx.fillRect(0, size - 40, size, 40)
+  ctx.strokeStyle = 'rgba(0,0,0,0.24)'
   ctx.lineWidth = 14
   ctx.strokeRect(7, 7, size - 14, size - 14)
 
+  // A dark disc behind the mark, so a pale logo survives a pale crate.
+  ctx.fillStyle = 'rgba(11,21,38,0.55)'
+  ctx.beginPath()
+  ctx.arc(size / 2, size * 0.42, size * 0.29, 0, Math.PI * 2)
+  ctx.fill()
+
+  const markSize = size * 0.42
+  drawMark(ctx, markKey(label), (size - markSize) / 2, size * 0.42 - markSize / 2, markSize)
+
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const { size: fs, lines } = fitLines(ctx, label, size * 0.84, 92, 800, 3)
+  const { size: fs, lines } = fitLines(ctx, label, size * 0.86, 62, 800, 2)
   ctx.font = `800 ${fs}px ${FONT_STACK}`
-  const lh = fs * 1.12
-  let y = size / 2 - ((lines.length - 1) * lh) / 2
-
+  let y = size * 0.79 - ((lines.length - 1) * fs * 1.1) / 2
   for (const line of lines) {
-    ctx.fillStyle = 'rgba(0,0,0,0.28)'
-    ctx.fillText(line, size / 2 + 3, y + 4)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'
+    ctx.fillText(line, size / 2 + 2, y + 3)
     ctx.fillStyle = '#ffffff'
     ctx.fillText(line, size / 2, y)
-    y += lh
+    y += fs * 1.1
   }
 
   const tex = finish(canvas, renderer)
@@ -283,9 +291,9 @@ export function skyTexture(top = '#0d1a38', horizon = '#f0a068', mid = '#2b4a80'
  * readable from a moving car.
  */
 export function containerSideTexture(renderer, {
-  title, sub = '', meta = '', color = '#2f6fa8', width = 1024, height = 420,
+  title, sub = '', meta = '', org = '', color = '#2f6fa8', width = 1024, height = 420,
 }) {
-  const key = `cside|${title}|${sub}|${meta}|${color}|${width}x${height}`
+  const key = `cside|${title}|${sub}|${meta}|${org}|${color}|${width}x${height}`
   if (cache.has(key)) return cache.get(key)
 
   const canvas = makeCanvas(width, height)
@@ -315,28 +323,38 @@ export function containerSideTexture(renderer, {
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const inner = width * 0.84
   const hasSub = Boolean(sub || meta)
+
+  // An org mark sits at the left of the plate; the type shifts right to clear it.
+  let textCentre = width / 2
+  let inner = width * 0.84
+  if (org) {
+    const markSize = plateH * 0.72
+    drawOrgMark(ctx, org, width * 0.08, plateY + (plateH - markSize) / 2, markSize)
+    const used = width * 0.08 + markSize
+    textCentre = used + (width * 0.955 - used) / 2
+    inner = (width * 0.955 - used) * 0.92
+  }
 
   const tf = fitLines(ctx, title, inner, Math.round(height * (hasSub ? 0.3 : 0.4)), 800, 1)
   ctx.font = `800 ${tf.size}px ${FONT_STACK}`
   ctx.letterSpacing = '2px'
   ctx.fillStyle = '#eef4ff'
-  ctx.fillText(title, width / 2, plateY + (hasSub ? plateH * 0.36 : plateH * 0.5))
+  ctx.fillText(title, textCentre, plateY + (hasSub ? plateH * 0.36 : plateH * 0.5))
   ctx.letterSpacing = '0px'
 
   if (sub) {
     const sf = fitLines(ctx, sub, inner, Math.round(height * 0.11), 600, 1)
     ctx.font = `600 ${sf.size}px ${FONT_STACK}`
     ctx.fillStyle = 'rgba(226,236,255,0.78)'
-    ctx.fillText(sub, width / 2, plateY + plateH * 0.64)
+    ctx.fillText(sub, textCentre, plateY + plateH * 0.64)
   }
   if (meta) {
     const mf = fitLines(ctx, meta.toUpperCase(), inner, Math.round(height * 0.085), 700, 1)
     ctx.font = `700 ${mf.size}px ${FONT_STACK}`
     ctx.letterSpacing = '3px'
     ctx.fillStyle = 'rgba(226,236,255,0.5)'
-    ctx.fillText(meta.toUpperCase(), width / 2, plateY + plateH * 0.85)
+    ctx.fillText(meta.toUpperCase(), textCentre, plateY + plateH * 0.85)
     ctx.letterSpacing = '0px'
   }
 
@@ -346,8 +364,10 @@ export function containerSideTexture(renderer, {
 }
 
 /** The roof of a container — the face the overhead camera actually sees. */
-export function containerTopTexture(renderer, { title, items = [], color = '#2f6fa8', width = 1024, height = 420 }) {
-  const key = `ctop|${title}|${items.join('~')}|${color}|${width}x${height}`
+export function containerTopTexture(renderer, {
+  title, items = [], marks = false, org = '', color = '#2f6fa8', width = 1024, height = 420,
+}) {
+  const key = `ctop|${title}|${items.join('~')}|${marks}|${org}|${color}|${width}x${height}`
   if (cache.has(key)) return cache.get(key)
 
   const canvas = makeCanvas(width, height)
@@ -368,20 +388,60 @@ export function containerTopTexture(renderer, { title, items = [], color = '#2f6
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const inner = width * 0.86
+  let inner = width * 0.86
+  let centre = width / 2
 
-  if (items.length) {
+  // The roof is the face the overhead camera reads, so the org mark belongs
+  // here too, not only on the sides.
+  if (org && !(marks && items.length)) {
+    const markSize = height * 0.5
+    drawOrgMark(ctx, org, width * 0.08, (height - markSize) / 2, markSize)
+    const used = width * 0.08 + markSize
+    centre = used + (width * 0.94 - used) / 2
+    inner = (width * 0.94 - used) * 0.9
+  }
+
+  if (marks && items.length) {
+    // The roof is what the overhead camera reads, so it gets the marks in a row
+    // with their names under them.
+    const tf = fitLines(ctx, title, inner, Math.round(height * 0.22), 800, 1)
+    ctx.font = `800 ${tf.size}px ${FONT_STACK}`
+    ctx.fillStyle = '#eef4ff'
+    ctx.fillText(title, width / 2, height * 0.19)
+
+    const n = items.length
+    const slot = inner / n
+    const markSize = Math.min(slot * 0.62, height * 0.34)
+    const rowY = height * 0.5
+    items.forEach((item, i) => {
+      const cx = width * 0.07 + slot * (i + 0.5)
+      ctx.fillStyle = 'rgba(11,21,38,0.5)'
+      ctx.beginPath()
+      ctx.arc(cx, rowY, markSize * 0.68, 0, Math.PI * 2)
+      ctx.fill()
+      drawMark(ctx, markKey(item), cx - markSize / 2, rowY - markSize / 2, markSize)
+
+      let fs = Math.min(slot * 0.19, height * 0.075)
+      ctx.font = `600 ${fs}px ${FONT_STACK}`
+      while (ctx.measureText(item).width > slot * 0.96 && fs > 10) {
+        fs -= 1
+        ctx.font = `600 ${fs}px ${FONT_STACK}`
+      }
+      ctx.fillStyle = 'rgba(226,236,255,0.82)'
+      ctx.fillText(item, cx, rowY + markSize * 0.68 + fs * 0.9)
+    })
+  } else if (items.length) {
     const tf = fitLines(ctx, title, inner, Math.round(height * 0.26), 800, 1)
     ctx.font = `800 ${tf.size}px ${FONT_STACK}`
     ctx.fillStyle = '#eef4ff'
-    ctx.fillText(title, width / 2, height * 0.3)
+    ctx.fillText(title, centre, height * 0.34)
 
     const lf = fitLines(ctx, items.join('   ·   '), inner, Math.round(height * 0.12), 600, 2)
     ctx.font = `600 ${lf.size}px ${FONT_STACK}`
     ctx.fillStyle = 'rgba(226,236,255,0.76)'
-    let y = height * 0.58
+    let y = height * 0.6
     for (const l of lf.lines) {
-      ctx.fillText(l, width / 2, y)
+      ctx.fillText(l, centre, y)
       y += lf.size * 1.3
     }
   } else {
@@ -390,7 +450,7 @@ export function containerTopTexture(renderer, { title, items = [], color = '#2f6
     ctx.fillStyle = '#eef4ff'
     let y = height / 2 - ((tf.lines.length - 1) * tf.size * 1.1) / 2
     for (const l of tf.lines) {
-      ctx.fillText(l, width / 2, y)
+      ctx.fillText(l, centre, y)
       y += tf.size * 1.1
     }
   }
@@ -443,6 +503,38 @@ export function bannerTexture(renderer, { title, color = '#ef7360', width = 512,
     ctx.fillText(l, width * 0.53, y)
     y += f.size * 1.15
   }
+  const tex = finish(canvas, renderer)
+  cache.set(key, tex)
+  return tex
+}
+
+/** A banner that carries a country flag and the language name. */
+export function languageFlagTexture(renderer, { code, language, level = '', width = 512, height = 320 }) {
+  const key = `lang|${code}|${language}|${level}|${width}x${height}`
+  if (cache.has(key)) return cache.get(key)
+
+  const canvas = makeCanvas(width, height)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#0d192d'
+  ctx.fillRect(0, 0, width, height)
+
+  const flagH = height * 0.56
+  const flagW = flagH * 1.5
+  drawFlag(ctx, code, (width - flagW) / 2, height * 0.08, flagW, flagH)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const lf = fitLines(ctx, language, width * 0.9, Math.round(height * 0.17), 800, 1)
+  ctx.font = `800 ${lf.size}px ${FONT_STACK}`
+  ctx.fillStyle = '#eef4ff'
+  ctx.fillText(language, width / 2, height * 0.76)
+
+  if (level) {
+    ctx.font = `600 ${Math.round(height * 0.09)}px ${FONT_STACK}`
+    ctx.fillStyle = 'rgba(226,236,255,0.65)'
+    ctx.fillText(level, width / 2, height * 0.91)
+  }
+
   const tex = finish(canvas, renderer)
   cache.set(key, tex)
   return tex

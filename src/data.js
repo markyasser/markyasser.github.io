@@ -29,6 +29,7 @@ export const EXPERIENCE = [
   {
     id: 'prepit',
     company: 'Prepit',
+    logo: 'prepit',
     role: 'Software Engineer',
     period: 'Mar 2025 — Present',
     place: 'Cairo, Egypt',
@@ -49,6 +50,7 @@ export const EXPERIENCE = [
   {
     id: 'cairo-ta',
     company: 'Faculty of Engineering, Cairo University',
+    logo: 'cairo',
     role: 'Teaching Assistant',
     period: 'Feb 2025 — May 2025',
     place: 'Cairo, Egypt',
@@ -63,6 +65,7 @@ export const EXPERIENCE = [
   {
     id: 'gameball',
     company: 'Gameball',
+    logo: 'gameball',
     role: 'Backend Intern',
     period: 'Jul 2024 — Sep 2024',
     place: 'Cairo, Egypt',
@@ -87,7 +90,7 @@ export const EDUCATION = {
 
 // Skill groups — each group becomes a stack of smashable crates in the yard.
 export const SKILL_GROUPS = [
-  { id: 'languages', label: 'Languages', color: 0xef6f5c,
+  { id: 'languages', label: 'Programming Languages', color: 0xef6f5c,
     items: ['JavaScript', 'Java', 'C#', 'Python', 'Kotlin', 'SQL', 'C++'] },
   { id: 'backend', label: 'Backend', color: 0x2fb3a3,
     items: ['Node.js', 'Express.js', 'ASP.NET Core', 'Spring Boot', 'REST APIs', 'Socket.IO'] },
@@ -105,6 +108,16 @@ export const SKILL_GROUPS = [
     items: ['Unit', 'Integration', 'End-to-End', 'Pact Contract'] },
   { id: 'practices', label: 'Practices', color: 0x8aa0b8,
     items: ['Agile', 'Scrum', 'Post-Mortems', 'Code Review', 'Mentoring'] },
+]
+
+// Spoken languages. These are NOT in the PDF CV — Arabic and English follow
+// from living in Cairo and working in English, but set the levels (and add or
+// remove a language) to match reality. An empty level renders the flag and the
+// name with no claim attached.
+export const LANGUAGES = [
+  { language: 'Arabic', code: 'eg', level: 'Native' },
+  { language: 'English', code: 'gb', level: 'Professional' },
+  { language: 'French', code: 'fr', level: '' },
 ]
 
 export const CONTACT_LINKS = [

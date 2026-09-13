@@ -79,6 +79,32 @@ Two consequences worth knowing:
 - Smashing a skill group's crates does not lose the information: the full list
   is also printed across its container's roof.
 
+## Logos
+
+Every mark in the world — AWS, Docker, Terraform, React, the Cairo University
+crest, the country flags — is drawn with Canvas2D from geometry written by hand
+in [`src/logos.js`](src/logos.js). Nothing loads an image file: the published
+page's CSP blocks external images, and keeping the whole site to one JS bundle
+is the reason it has no asset pipeline at all.
+
+They are **stylised originals**, recognisable by shape and colour rather than
+facsimiles of anyone's trademark. Each mark is a function that draws into a unit
+square, so swapping one for real brand artwork means replacing a single
+function — stroke the official SVG path there and everything downstream (crates,
+container roofs, container sides) picks it up.
+
+Adding a technology is two lines: an entry in `ALIASES` mapping its name to a
+mark, and one in `BRAND` for its colour. Anything unmapped falls back to a
+neutral tile, so a new skill in `data.js` never renders broken.
+
+Marks appear in three places:
+
+- **Crates** — the mark large, the skill name captioned under it, on a crate
+  painted that technology's own colour.
+- **Container roofs** — a row of marks with names, which is what the overhead
+  camera actually reads.
+- **Container sides** — the employer or platform mark beside the title.
+
 ## The camera
 
 The default camera deliberately does **not** sit behind the car. A chase camera
