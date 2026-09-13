@@ -617,6 +617,42 @@ export const ORG_MARKS = {
 }
 
 Object.assign(ORG_MARKS, {
+  // Faculty of Engineering: gear and dividers in a ring, the standard
+  // engineering-faculty vocabulary.
+  engineering(ctx) {
+    ctx.strokeStyle = '#dbe9ff'
+    ctx.lineWidth = 0.05
+    circle(ctx, 0.5, 0.5, 0.43)
+    ctx.stroke()
+
+    // Gear.
+    const teeth = 10
+    ctx.fillStyle = '#dbe9ff'
+    for (let i = 0; i < teeth; i++) {
+      const a = (Math.PI * 2 * i) / teeth
+      ctx.save()
+      ctx.translate(0.5, 0.5)
+      ctx.rotate(a)
+      ctx.fillRect(-0.045, -0.36, 0.09, 0.12)
+      ctx.restore()
+    }
+    ctx.lineWidth = 0.075
+    circle(ctx, 0.5, 0.5, 0.26)
+    ctx.stroke()
+
+    // Dividers over the hub.
+    ctx.strokeStyle = '#dbe9ff'
+    ctx.lineWidth = 0.055
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(0.5, 0.3)
+    ctx.lineTo(0.38, 0.66)
+    ctx.moveTo(0.5, 0.3)
+    ctx.lineTo(0.62, 0.66)
+    ctx.stroke()
+    circle(ctx, 0.5, 0.3, 0.05, '#dbe9ff')
+  },
+
   // A cat silhouette in a disc — the shape people read GitHub by.
   github(ctx) {
     circle(ctx, 0.5, 0.5, 0.42, '#e9eefb')
@@ -678,7 +714,56 @@ Object.assign(ORG_MARKS, {
   },
 })
 
+// ---------------------------------------------------------------------------
+// Real artwork
+//
+// Everything above is drawn from geometry because this project has no asset
+// pipeline. To use an actual logo file instead, put it here as a data URI
+// (`base64 -w0 logo.png`, prefixed with `data:image/png;base64,`) under the key
+// it should replace. It then overrides the drawn mark everywhere at once —
+// crate faces, container sides and roofs, flags.
+//
+// Images are preloaded before the world is built, because every texture in this
+// project is drawn once into a canvas and never revisited; an image that
+// arrives late would simply be missed.
+// ---------------------------------------------------------------------------
+
+export const IMAGE_MARKS = {
+  // cairo: 'data:image/png;base64,...',
+  // engineering: 'data:image/png;base64,...',
+}
+
+const loadedImages = new Map()
+
+export function preloadMarks() {
+  const entries = Object.entries(IMAGE_MARKS)
+  if (!entries.length) return Promise.resolve()
+  return Promise.all(
+    entries.map(([key, src]) =>
+      new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => {
+          loadedImages.set(key, img)
+          resolve()
+        }
+        // A broken data URI should cost the drawn fallback, not the whole world.
+        img.onerror = () => resolve()
+        img.src = src
+      })
+    )
+  )
+}
+
 export function drawOrgMark(ctx, key, x, y, size) {
+  const img = loadedImages.get(key)
+  if (img) {
+    // Fit inside the box, preserving the artwork's aspect.
+    const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight)
+    const w = img.naturalWidth * scale
+    const h = img.naturalHeight * scale
+    ctx.drawImage(img, x + (size - w) / 2, y + (size - h) / 2, w, h)
+    return
+  }
   const mark = ORG_MARKS[key]
   if (!mark) return
   ctx.save()

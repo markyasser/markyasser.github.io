@@ -20,8 +20,10 @@ marking is drawn into a canvas at runtime, so the entire site is one JS bundle.
 | South | Contact | GitHub, LinkedIn and email containers |
 | North-east | Stunt park | Ramps, barrels, bowling pins |
 
-Ten glowing shards are hidden around the map; each one reveals a fact about the
-work.
+Ten glowing shards line the routes through the experience avenue and the skills
+yard; each one reveals a fact about the work. They sit on the way *into* the
+zones with the most to read rather than hidden in the empty corners — a player
+who just follows the next glow ends up driving the CV end to end.
 
 Everything in the world is solid and everything moves. Containers shunt and
 topple, banners fold flat, and trees, rocks, lamps, barrels and crates smash
@@ -57,7 +59,9 @@ read at this hour, and a lit forecourt board is what you would actually see at
 
 ## Everything is an object
 
-There are no buildings, no gateway arches and no signs painted on the ground.
+There are no gateway arches and no signs painted on the ground. There is exactly
+one building — Cairo University's domed hall, because the campus is known by
+that silhouette and a lettered box is not it.
 Every piece of the CV is carried by a physical object the car can hit: the
 titles are stencilled on shipping containers, the zones are marked by banners on
 poles, the headline numbers are cubes, and the skills are crates you can smash.
@@ -65,6 +69,11 @@ poles, the headline numbers are cubes, and the skills are crates you can smash.
 Containers are lettered on their long sides so they read from the road, and
 across the roof so they read from the overhead camera — that second face matters,
 because a fixed high camera sees anything vertical almost edge-on.
+
+Even the hall is a dynamic body. It carries its centre of mass down near the
+ground — cannon treats a body's origin as its centre of mass, so the collision
+box is offset upward from it — which gives it the weight distribution of masonry:
+a hit shifts it a little and never tips it over.
 
 The only immovable things in the world are the boundary and the stunt ramps. The
 ramps stay fixed because they are terrain you drive *on*; a ramp that slid away

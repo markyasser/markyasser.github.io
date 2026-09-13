@@ -7,7 +7,7 @@ import { Breakables } from './breakables.js'
 import {
   crateTexture, statTexture, labelTexture, groundTexture, skyTexture,
   containerSideTexture, containerTopTexture, containerEndTexture, bannerTexture,
-  languageFlagTexture,
+  languageFlagTexture, logoFlagTexture,
 } from './textures.js'
 import { brandColor } from './logos.js'
 import { PROFILE, EXPERIENCE, EDUCATION, SKILL_GROUPS, STATS, CONTACT_LINKS, LANGUAGES, SHARD_FACTS } from './data.js'
@@ -254,10 +254,11 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
 
   // --- Hub ---------------------------------------------------------------
   function buildHub() {
-    // The name sits on the biggest container in the world, square across the
-    // approach road so it is the first thing the player drives at.
+    // The name sits on the biggest container in the world, flanking the plaza
+    // rather than crossing it: at 15m long and centred it walled off the
+    // northbound avenue completely, and the experience zone behind it.
     const name = addContainer({
-      x: 0, z: -13, length: 15, height: 3.6, width: 3.4, mass: 260,
+      x: -14, z: -12, length: 15, height: 3.6, width: 3.4, mass: 260,
       title: PROFILE.short,
       meta: PROFILE.title,
       color: C.navyLight,
@@ -267,9 +268,9 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     addPOI({
       id: 'about',
       kind: 'about',
-      position: new THREE.Vector3(0, 1, -6),
+      position: new THREE.Vector3(-4, 1, -6),
       follow: name.body,
-      followOffset: new THREE.Vector3(0, 0, 7),
+      followOffset: new THREE.Vector3(10, 0, 6),
       radius: 13,
       title: 'About Mark',
     })
@@ -446,24 +447,51 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   function buildCampus() {
     const { x: cx, z: cz } = ZONES.education
 
-    const main = addContainer({
-      x: cx, z: cz, rotY: 0, length: 13, height: 3.4, width: 3.2, mass: 170,
-      title: EDUCATION.school,
-      meta: EDUCATION.period,
-      org: 'cairo',
-      color: C.violet,
-      accent: C.navy,
+    // Cairo University gets the one building left in the world. It is still a
+    // dynamic body — nothing here is immovable except the boundary — but heavy
+    // and heavily damped, so it takes a real hit to shift and never topples
+    // from a nudge.
+    const hall = P.domedHall({ width: 10, depth: 8 })
+    const half = hall.userData.half
+    hall.position.set(cx, 0, cz)
+    hall.rotation.y = Math.PI / 2
+    root.add(hall)
+
+    // cannon treats a body's origin as its centre of mass, so putting the
+    // origin near the ground and offsetting the collision box upward gives the
+    // hall the weight distribution of masonry. Without this a clipped corner
+    // pivots the whole building about its base edge and lays it on its side,
+    // however much mass or angular damping it is given.
+    const comY = 0.5
+    const hallBody = new CANNON.Body({
+      mass: 620,
+      material: materials.prop,
+      position: new CANNON.Vec3(cx, comY, cz),
+      quaternion: new CANNON.Quaternion().setFromEuler(0, Math.PI / 2, 0),
+      angularDamping: 0.9,
+      linearDamping: 0.15,
+      allowSleep: true,
+      sleepSpeedLimit: 0.3,
+      sleepTimeLimit: 0.5,
     })
+    hallBody.addShape(
+      new CANNON.Box(new CANNON.Vec3(half.x, half.y, half.z)),
+      new CANNON.Vec3(0, half.y - comY, 0)
+    )
+    world.addBody(hallBody)
+    hallBody.updateAABB()
+    // The mesh is modelled sitting on the ground; the body's origin is just above it.
+    dynamics.push({ mesh: hall, body: hallBody, yOffset: -comY })
+    obstacles.push({ x: cx, z: cz, r: 12 })
 
     addContainer({
-      x: cx + 2, z: cz - 8, rotY: 0, length: 9, height: 2.4, width: 2.6, mass: 80,
+      x: cx + 1, z: cz - 10, rotY: 0, length: 9, height: 2.4, width: 2.6, mass: 80,
       title: EDUCATION.grade,
       color: C.navyLight,
       accent: C.violet,
     })
 
-    // The graduation cap survived the campus: it sits on the container roof and
-    // is its own body, so a solid hit sends it flying.
+    // The graduation cap, now sitting on the honours container.
     const cap = new THREE.Group()
     cap.add(P.meshOf(new THREE.CylinderGeometry(1.2, 1.4, 1.1, 16), P.std(C.navy)))
     const board = P.meshOf(new THREE.BoxGeometry(4.4, 0.3, 4.4), P.std(C.navy))
@@ -473,27 +501,38 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const button = P.meshOf(new THREE.SphereGeometry(0.22, 10, 8), P.std(C.amber))
     button.position.y = 0.92
     cap.add(button)
-    cap.position.set(cx - 3, 4.6, cz)
+    cap.position.set(cx + 1, 4.2, cz - 10)
     root.add(cap)
     const capBody = P.boxBody({
-      world, size: { x: 4.2, y: 1.6, z: 4.2 }, position: { x: cx - 3, y: 4.6, z: cz },
+      world, size: { x: 4.2, y: 1.6, z: 4.2 }, position: { x: cx + 1, y: 4.2, z: cz - 10 },
       mass: 45, material: materials.prop,
     })
     dynamics.push({ mesh: cap, body: capBody })
 
-    addFlag({ x: cx + 10, z: cz + 7, title: 'EDUCATION', color: C.violet })
+    // The two crests, as flags either side of the approach.
+    addFlag({
+      x: cx + 12, z: cz + 8,
+      title: 'Cairo University',
+      texture: logoFlagTexture(renderer, { org: 'cairo', title: 'Cairo University', color: hex(C.violet) }),
+    })
+    addFlag({
+      x: cx + 12, z: cz - 8,
+      title: 'Faculty of Engineering',
+      texture: logoFlagTexture(renderer, { org: 'engineering', title: 'Faculty of Engineering', color: hex(C.blue) }),
+    })
+
     buildLanguages(cx, cz + 19)
 
     addPOI({
       id: 'education',
       kind: 'education',
-      position: new THREE.Vector3(cx + 11, 1, cz),
-      follow: main.body,
-      followOffset: new THREE.Vector3(11, 0, 0),
+      position: new THREE.Vector3(cx + 13, 1, cz),
+      follow: hallBody,
+      followOffset: new THREE.Vector3(13, 0, 0),
       radius: 13,
       title: EDUCATION.school,
     })
-    addLabel('EDUCATION', new THREE.Vector3(cx, 10, cz), { height: 1.1, bg: 'rgba(143,131,247,0.95)' })
+    addLabel('CAIRO UNIVERSITY', new THREE.Vector3(cx, 12, cz), { height: 1.1, bg: 'rgba(143,131,247,0.95)' })
   }
 
   /** Spoken languages, as country flags on poles beside the university. */
@@ -860,9 +899,22 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
 
   // --- Collectibles ------------------------------------------------------
   function buildShards() {
+    // Shards sit along the routes into the two zones with the most to read,
+    // rather than hidden in empty corners. A player who follows the next glow
+    // ends up driving the experience avenue and the skills yard end to end,
+    // which is the point — they were scattered into the quiet quarters before,
+    // and rewarded wandering away from the CV instead of into it.
     const spots = [
-      [30, 30], [-32, -26], [50, 26], [-50, -34], [20, -82],
-      [82, -20], [-82, 24], [-26, 78], [36, 74], [-64, 60],
+      // The experience avenue, one between each pair of containers. Kept close
+      // to the centre line: the pickup radius is small once the height
+      // difference between car and gem is taken out of it.
+      [-2, -18], [2, -36], [-2, -56], [2, -72],
+      // The stats gallery at the far end.
+      [0, -84],
+      // The aisles of the skills yard.
+      [54, -9], [70, 6], [54, 21],
+      // One each on the way to education and contact.
+      [-46, 4], [7, 52],
     ]
     const shardGeo = new THREE.OctahedronGeometry(0.9, 0)
     const shardMat = new THREE.MeshStandardMaterial({
@@ -879,8 +931,8 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       root.add(mesh)
 
       const halo = P.meshOf(
-        new THREE.RingGeometry(1.5, 1.9, 24),
-        new THREE.MeshBasicMaterial({ color: 0xf5b942, transparent: true, opacity: 0.5, side: THREE.DoubleSide }),
+        new THREE.RingGeometry(1.7, 2.3, 28),
+        new THREE.MeshBasicMaterial({ color: 0xf5b942, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
         { cast: false, receive: false }
       )
       halo.rotation.x = -Math.PI / 2

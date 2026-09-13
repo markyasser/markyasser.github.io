@@ -267,3 +267,84 @@ export function bannerFlag({ texture, poleHeight = 5.2, bannerW = 2.6, bannerH =
   group.userData.cloth = cloth
   return group
 }
+
+/**
+ * A small domed hall, for Cairo University. The dome on a drum over a
+ * colonnaded portico is what the campus is known by, and it reads at a glance
+ * where a lettered box does not.
+ *
+ * Kept deliberately small — a couple of container-heights — so it sits in the
+ * world as a landmark rather than a wall the camera has to see around.
+ * Returns the group plus the half-extents the physics body should use.
+ */
+export function domedHall({
+  width = 10, depth = 8, color = 0xc9bda4, dome = 0x7d9a8f, trim = 0xe6dcc8,
+}) {
+  const group = new THREE.Group()
+  const stone = std(color, { roughness: 0.9 })
+  const trimMat = std(trim, { roughness: 0.85 })
+  const domeMat = std(dome, { roughness: 0.55, metalness: 0.25 })
+
+  const hallH = 2.6
+  const add = (mesh, x, y, z) => {
+    mesh.position.set(x, y, z)
+    group.add(mesh)
+    return mesh
+  }
+
+  // Stepped plinth.
+  add(meshOf(new THREE.BoxGeometry(width, 0.35, depth), trimMat), 0, 0.175, 0)
+  add(meshOf(new THREE.BoxGeometry(width - 0.9, 0.3, depth - 0.9), stone), 0, 0.5, 0)
+
+  // Main block, with lower wings either side.
+  add(meshOf(new RoundedBoxGeometry(width * 0.54, hallH, depth * 0.8, 3, 0.1), stone), 0, 0.65 + hallH / 2, 0)
+  for (const sx of [-1, 1]) {
+    add(
+      meshOf(new RoundedBoxGeometry(width * 0.24, hallH * 0.7, depth * 0.58, 3, 0.1), stone),
+      sx * width * 0.38, 0.65 + (hallH * 0.7) / 2, 0
+    )
+  }
+
+  // Cornice.
+  add(meshOf(new THREE.BoxGeometry(width * 0.58, 0.24, depth * 0.84), trimMat), 0, 0.65 + hallH + 0.12, 0)
+
+  // Drum and dome.
+  const drumY = 0.65 + hallH + 0.24
+  add(meshOf(new THREE.CylinderGeometry(depth * 0.27, depth * 0.29, 0.9, 20), trimMat), 0, drumY + 0.45, 0)
+  const domeGeo = new THREE.SphereGeometry(depth * 0.28, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2)
+  add(meshOf(domeGeo, domeMat), 0, drumY + 0.9, 0)
+  add(meshOf(new THREE.SphereGeometry(0.18, 10, 8), trimMat), 0, drumY + 0.9 + depth * 0.28 + 0.12, 0)
+
+  // Portico: columns under a pediment, facing +Z.
+  const colGeo = new THREE.CylinderGeometry(0.19, 0.21, hallH * 0.86, 12)
+  const frontZ = depth * 0.42
+  for (let i = 0; i < 4; i++) {
+    add(meshOf(colGeo, trimMat), (i - 1.5) * (width * 0.135), 0.65 + (hallH * 0.86) / 2, frontZ)
+  }
+  add(meshOf(new THREE.BoxGeometry(width * 0.5, 0.22, 0.7), trimMat), 0, 0.65 + hallH * 0.86 + 0.11, frontZ)
+
+  const ped = new THREE.Shape()
+  ped.moveTo(-width * 0.25, 0)
+  ped.lineTo(width * 0.25, 0)
+  ped.lineTo(0, 0.85)
+  ped.lineTo(-width * 0.25, 0)
+  const pedGeo = new THREE.ExtrudeGeometry(ped, { depth: 0.55, bevelEnabled: false })
+  pedGeo.translate(0, 0, -0.275)
+  add(meshOf(pedGeo, trimMat), 0, 0.65 + hallH * 0.86 + 0.22, frontZ)
+
+  // Lit windows, so it has some life before sunrise.
+  const winMat = new THREE.MeshStandardMaterial({
+    color: 0xffca7d, emissive: 0xffb85e, emissiveIntensity: 1.4, roughness: 0.3,
+  })
+  const winGeo = new THREE.BoxGeometry(0.42, 0.8, 0.12)
+  for (const sz of [depth * 0.4 + 0.02, -depth * 0.4 - 0.02]) {
+    for (let i = 0; i < 4; i++) {
+      const w = meshOf(winGeo, winMat, { cast: false })
+      add(w, (i - 1.5) * (width * 0.115), 0.65 + hallH * 0.52, sz)
+    }
+  }
+
+  group.userData.half = { x: width / 2, y: (drumY + 1.2) / 2, z: depth / 2 }
+  group.userData.centreY = (drumY + 1.2) / 2
+  return group
+}

@@ -8,6 +8,7 @@ import { C } from './palette.js'
 import { Car } from './car.js'
 import { buildWorld, ZONES } from './world.js'
 import { STATIC_GROUP } from './props.js'
+import { preloadMarks } from './logos.js'
 import { Controls } from './controls.js'
 import { UI } from './ui.js'
 import { Minimap } from './minimap.js'
@@ -195,7 +196,12 @@ class App {
       await new Promise((r) => setTimeout(r, 16))
     }
 
-    await step(0.12, 'Paving the roads…')
+    await step(0.08, 'Loading the marks…')
+    // Every texture is drawn into a canvas exactly once, so any real logo
+    // artwork has to be decoded before the world is built.
+    await preloadMarks()
+
+    await step(0.15, 'Paving the roads…')
     this.worldRefs = buildWorld({
       scene: this.scene,
       world: this.world,
@@ -505,7 +511,7 @@ class App {
     const p = this.car.position
     for (const shard of this.worldRefs.shards) {
       if (shard.collected) continue
-      if (p.distanceToSquared(shard.position) > 16) continue
+      if (p.distanceToSquared(shard.position) > 25) continue
       shard.collected = true
       shard.mesh.visible = false
       shard.halo.visible = false
