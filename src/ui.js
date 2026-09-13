@@ -1,5 +1,23 @@
 import { PROFILE, EXPERIENCE, EDUCATION, SKILL_GROUPS, STATS, CONTACT_LINKS } from './data.js'
 
+// Storage is a nicety, not a requirement: private windows and blocked site data
+// both throw, and the game must load regardless.
+function readStored(key) {
+  try {
+    return localStorage.getItem('portfolio:' + key)
+  } catch {
+    return null
+  }
+}
+
+function writeStored(key, value) {
+  try {
+    localStorage.setItem('portfolio:' + key, value)
+  } catch {
+    /* ignore */
+  }
+}
+
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
@@ -41,6 +59,14 @@ export class UI {
     this.resume = document.getElementById('resume')
     this.touch = document.getElementById('touch')
 
+    // Sound is opt-in and remembered. Starting a page making noise unannounced
+    // is startling, so the choice is made here, before anything plays.
+    this.soundCheck = document.getElementById('sound-check')
+    this.soundCheck.checked = readStored('sound') === '1'
+    this.soundCheck.addEventListener('change', () => {
+      writeStored('sound', this.soundCheck.checked ? '1' : '0')
+    })
+
     const coarseHint = window.matchMedia('(pointer: coarse)').matches
     document.getElementById('load-hint').innerHTML = coarseHint
       ? `Use the on-screen pads to drive. Pinch to zoom out.<br>
@@ -61,7 +87,12 @@ export class UI {
     document.getElementById('btn-camera').addEventListener('click', () => onCamera())
 
     this.soundBtn = document.getElementById('btn-sound')
-    this.soundBtn.addEventListener('click', () => this.setSound(onToggleSound()))
+    this.soundBtn.addEventListener('click', () => {
+      const on = onToggleSound()
+      this.setSound(on)
+      this.soundCheck.checked = on
+      writeStored('sound', on ? '1' : '0')
+    })
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -92,6 +123,10 @@ export class UI {
     <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
     <div class="load-status" id="load-status">Building the world…</div>
     <button class="start-btn" id="start-btn">Start driving</button>
+    <label class="sound-opt" id="sound-opt">
+      <input type="checkbox" id="sound-check">
+      <span>Play sound</span>
+    </label>
     <div class="load-hint" id="load-hint"></div>
   </div>
 </div>
@@ -183,6 +218,11 @@ export class UI {
     </article>`
   }
 
+  /** Did the player ask for sound on the loading screen? */
+  wantsSound() {
+    return this.soundCheck.checked
+  }
+
   setSound(on) {
     this.soundBtn.classList.toggle('off', !on)
     this.soundBtn.textContent = on ? '🔊' : '🔈'
@@ -198,6 +238,7 @@ export class UI {
   readyToStart() {
     this.loadStatus.textContent = 'Ready'
     this.startBtn.classList.add('ready')
+    document.getElementById('sound-opt').classList.add('ready')
   }
 
   hideLoading() {

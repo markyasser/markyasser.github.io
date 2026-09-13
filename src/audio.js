@@ -23,7 +23,9 @@ export class Audio {
     this.filter = this.ctx.createBiquadFilter()
     this.filter.type = 'lowpass'
     this.filter.frequency.value = 420
-    this.filter.Q.value = 3
+    // Kept low deliberately: at Q=3 a static low sawtooth resonates into
+    // something that sounds unnervingly like a human drone.
+    this.filter.Q.value = 0.7
 
     this.osc1 = this.ctx.createOscillator()
     this.osc1.type = 'sawtooth'
@@ -83,14 +85,23 @@ export class Audio {
   update(speed, throttle) {
     if (!this.enabled || !this.ctx) return
     const t = this.ctx.currentTime
-    const rev = Math.min(1, speed / 26)
-    const base = 52 + rev * 128 + Math.abs(throttle) * 22
+    const rev = Math.min(1, speed / 30)
+    const effort = Math.abs(throttle)
+
+    // A little wander keeps the idle from sitting on one dead pitch.
+    const wobble = Math.sin(t * 7.3) * 1.6 + Math.sin(t * 3.1) * 0.9
+    const base = 64 + rev * 150 + effort * 26 + wobble
     this.osc1.frequency.setTargetAtTime(base, t, 0.08)
     this.osc2.frequency.setTargetAtTime(base * 1.51, t, 0.08)
-    this.filter.frequency.setTargetAtTime(380 + rev * 1500 + Math.abs(throttle) * 400, t, 0.1)
-    this.engineGain.gain.setTargetAtTime(0.06 + rev * 0.1 + Math.abs(throttle) * 0.05, t, 0.12)
-    this.noiseGain.gain.setTargetAtTime(rev * 0.035, t, 0.15)
-    this.noiseFilter.frequency.setTargetAtTime(500 + rev * 1600, t, 0.15)
+    this.filter.frequency.setTargetAtTime(300 + rev * 2100 + effort * 500, t, 0.1)
+
+    // Near-silent when parked: a constant hum under a stationary car is the
+    // part that sounded wrong, and an idling engine you can barely hear is
+    // truer anyway.
+    const idle = 0.012
+    this.engineGain.gain.setTargetAtTime(idle + rev * 0.115 + effort * 0.055, t, 0.12)
+    this.noiseGain.gain.setTargetAtTime(rev * 0.04, t, 0.15)
+    this.noiseFilter.frequency.setTargetAtTime(500 + rev * 1800, t, 0.15)
   }
 
 

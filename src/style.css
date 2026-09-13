@@ -77,6 +77,18 @@ button { font-family: inherit; cursor: pointer; }
 .start-btn.ready { opacity: 1; pointer-events: auto; }
 .start-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(239, 111, 92, 0.46); }
 
+.sound-opt {
+  display: inline-flex; align-items: center; gap: 9px;
+  margin-top: 16px; padding: 8px 16px; border-radius: 99px;
+  background: rgba(150, 185, 240, 0.1); border: 1px solid rgba(150, 185, 240, 0.22);
+  font-size: 12.5px; letter-spacing: 0.06em; color: rgba(214, 228, 250, 0.85);
+  cursor: pointer; user-select: none;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease, background 0.15s ease;
+}
+.sound-opt.ready { opacity: 1; pointer-events: auto; }
+.sound-opt:hover { background: rgba(150, 185, 240, 0.18); }
+.sound-opt input { accent-color: var(--teal); width: 15px; height: 15px; cursor: pointer; }
+
 .load-hint { margin-top: 22px; font-size: 12.5px; color: rgba(196, 214, 245, 0.52); line-height: 1.7; }
 .load-hint kbd {
   display: inline-block; padding: 2px 7px; margin: 0 1px; border-radius: 5px;

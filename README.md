@@ -163,9 +163,15 @@ Props carry their voice on the physics body (`body.userData.sfx`), so the
 collision handler picks the right one without a lookup table. Anything untagged
 falls back to a generic thud.
 
-Sound switches on at the **Start driving** click — the gesture browsers require
-before audio may play, and the one moment it can be enabled without the player
-having to go and find the button. The speaker icon mutes.
+Sound is **opt-in**. There is a "Play sound" checkbox beside the Start button,
+unchecked by default and remembered between visits; until it is ticked the audio
+context is never even created. A page that starts making noise on its own is
+startling, and it is not a choice to make on someone's behalf.
+
+One thing to watch in the engine voice: it is a low sawtooth through a lowpass,
+and at any real resonance (Q above ~1.5) a static idle tone starts to sound
+unnervingly like a human drone. Q is held at 0.7, and the engine is near-silent
+when the car is parked.
 
 ## Running it
 

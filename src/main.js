@@ -253,10 +253,10 @@ class App {
   start() {
     this.ui.hideLoading()
     this.running = true
-    // The Start click is the gesture browsers require before audio may play, so
-    // this is the one moment sound can be switched on without the player having
-    // to go and find the button.
-    this.ui.setSound(this.audio.enable())
+    // Sound only if it was asked for. The Start click is the gesture browsers
+    // require before audio may play, so this is the moment to honour the choice
+    // made on the loading screen — but never to make it for the player.
+    if (this.ui.wantsSound()) this.ui.setSound(this.audio.enable())
     this.clock.getDelta()
     this.ui.toast(
       this.ui.isTouch
