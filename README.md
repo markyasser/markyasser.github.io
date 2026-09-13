@@ -151,6 +151,23 @@ Two consequences fall out of that choice, both handled in code:
 Press **C** for an overhead view, or a conventional chase camera if you prefer
 it. Scroll or pinch to zoom; the setting is remembered.
 
+## The gearbox
+
+Six speed-banded gears rather than a torque-and-ratio model: the car's handling
+is arcade, and a real RPM model would fight the flat drive force everywhere
+else. Each gear's band overlaps its neighbours', which is what stops the box
+hunting at the crossover speeds.
+
+Shifting cuts the drive for about a sixth of a second. That pause is the whole
+point of modelling gears at all — it is the part you feel. The engine note
+follows the revs rather than road speed, so the pitch climbs through a gear and
+drops on the shift, and the gain ducks while the clutch is out.
+
+Top gear stops just past the car's normal ceiling rather than stretching to the
+nitro ceiling. Spread over the full boost range the revs sat near idle at
+maximum speed and the engine sounded asleep; now nitro pins it against the
+limiter.
+
 ## Sound
 
 Every sound is synthesised — noise buffers, oscillators and filters — for the

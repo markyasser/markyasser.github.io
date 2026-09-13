@@ -440,7 +440,14 @@ class App {
       this._guardBounds()
 
       this.ui.setSpeed(this.car.speed * 3.6)
-      this.audio.update(this.car.speed, this.controls.state.throttle)
+      this.ui.setGear(this.car.gearLabel, this.car.rev)
+      this.audio.update(
+        this.car.speed,
+        this.controls.state.throttle,
+        this.car.rev,
+        this.car.shiftCut > 0
+      )
+      if (this.car.shifted) this.audio.shift(this.car.shifted > 0)
       // Tyres protest when the car is sliding rather than rolling.
       if (this.car.slip > 0.35 && this.car.speed > 7) {
         this.audio.screech(this.car.slip * (this.car.speed / 14))

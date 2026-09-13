@@ -82,28 +82,52 @@ export class Audio {
     return this.enabled
   }
 
-  update(speed, throttle) {
+  /**
+   * The engine note follows the revs, not road speed — that is what makes a
+   * gearbox audible: the pitch climbs through a gear and drops on the shift.
+   */
+  update(speed, throttle, rev = null, shifting = false) {
     if (!this.enabled || !this.ctx) return
     const t = this.ctx.currentTime
-    const rev = Math.min(1, speed / 30)
     const effort = Math.abs(throttle)
+    const revs = rev === null ? Math.min(1, speed / 30) : rev
 
     // A little wander keeps the idle from sitting on one dead pitch.
     const wobble = Math.sin(t * 7.3) * 1.6 + Math.sin(t * 3.1) * 0.9
-    const base = 64 + rev * 150 + effort * 26 + wobble
-    this.osc1.frequency.setTargetAtTime(base, t, 0.08)
-    this.osc2.frequency.setTargetAtTime(base * 1.51, t, 0.08)
-    this.filter.frequency.setTargetAtTime(300 + rev * 2100 + effort * 500, t, 0.1)
+    const base = 62 + revs * 196 + effort * 14 + wobble
+    this.osc1.frequency.setTargetAtTime(base, t, 0.05)
+    this.osc2.frequency.setTargetAtTime(base * 1.51, t, 0.05)
+    this.filter.frequency.setTargetAtTime(300 + revs * 2300 + effort * 420, t, 0.07)
 
-    // Near-silent when parked: a constant hum under a stationary car is the
-    // part that sounded wrong, and an idling engine you can barely hear is
-    // truer anyway.
+    // Near-silent when parked, and backed right off mid-shift so the pause in
+    // the drive is heard as well as felt.
     const idle = 0.012
-    this.engineGain.gain.setTargetAtTime(idle + rev * 0.115 + effort * 0.055, t, 0.12)
-    this.noiseGain.gain.setTargetAtTime(rev * 0.04, t, 0.15)
-    this.noiseFilter.frequency.setTargetAtTime(500 + rev * 1800, t, 0.15)
+    const load = shifting ? 0.25 : 1
+    this.engineGain.gain.setTargetAtTime((idle + revs * 0.115 + effort * 0.055) * load, t, 0.05)
+
+    const road = Math.min(1, speed / 30)
+    this.noiseGain.gain.setTargetAtTime(road * 0.04, t, 0.15)
+    this.noiseFilter.frequency.setTargetAtTime(500 + road * 1800, t, 0.15)
   }
 
+  /** The clunk of a gear going home. Up is a sharper knock than down. */
+  shift(up = true) {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    this._noise(t, {
+      duration: up ? 0.075 : 0.1,
+      from: up ? 2400 : 1500,
+      to: 420,
+      q: 1.8,
+      gain: 0.13,
+    })
+    this._tone(t, {
+      freq: up ? 210 : 150,
+      endFreq: up ? 96 : 78,
+      duration: 0.11,
+      gain: 0.12,
+    })
+  }
 
   // --- impact voices -------------------------------------------------------
   // Everything below is synthesised: no sample files, in keeping with the rest

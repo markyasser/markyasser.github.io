@@ -52,6 +52,10 @@ export class UI {
     this.prompt = document.getElementById('prompt')
     this.promptText = document.getElementById('prompt-text')
     this.gauge = document.getElementById('gauge-value')
+    this.gearEl = document.getElementById('gear-value')
+    this.revEl = document.getElementById('rev-fill')
+    this._gear = null
+    this._rev = -1
     this.shardEl = document.getElementById('shard-value')
     this.nitroEl = document.getElementById('nitro-value')
     this.nitroBox = document.getElementById('nitro-count')
@@ -145,7 +149,10 @@ export class UI {
     <button class="tool" id="btn-help" title="Help">?</button>
   </div>
 
-  <div class="gauge"><b id="gauge-value">0</b><span>km/h</span></div>
+  <div class="gauge">
+    <b id="gauge-value">0</b><span>km/h</span>
+    <div class="gear"><i id="gear-value">N</i><u><em id="rev-fill"></em></u></div>
+  </div>
   <div class="shard-count"><i>◆</i><span id="shard-value">0 / 10</span></div>
   <div class="nitro-count" id="nitro-count"><i>⚡</i><span id="nitro-value">0</span><b>NITRO</b></div>
 
@@ -248,6 +255,20 @@ export class UI {
   // --------------------------------------------------------------- hud
   setSpeed(kmh) {
     this.gauge.textContent = Math.round(kmh)
+  }
+
+  setGear(label, rev) {
+    if (label !== this._gear) {
+      this._gear = label
+      this.gearEl.textContent = label
+    }
+    // Only touch the DOM when the needle has actually moved a visible amount.
+    const pct = Math.round(rev * 100)
+    if (pct !== this._rev) {
+      this._rev = pct
+      this.revEl.style.width = `${pct}%`
+      this.revEl.classList.toggle('redline', pct > 88)
+    }
   }
 
   setShards(found, total) {
@@ -464,6 +485,7 @@ export class UI {
         <ul>
           <li><b>W / ↑</b> accelerate · <b>S / ↓</b> brake and reverse</li>
           <li><b>A / ←</b> and <b>D / →</b> steer</li>
+          <li>Six gears, shifted for you. The readout by the speedo shows the gear and the revs</li>
           <li><b>Space</b> handbrake · <b>R</b> reset the car</li>
           <li><b>Shift</b> burns a nitro charge — collect the blue canisters, then hit the ramps</li>
           <li><b>C</b> cycles the camera: follow, overhead, and a chase view that sits behind the car</li>

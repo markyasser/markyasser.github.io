@@ -23,6 +23,28 @@ const WHEEL = { radius: 0.56, width: 0.46 }
 const AXLE_Z = 1.38
 const AXLE_X = 0.96
 
+/**
+ * Gear bands, in metres per second of forward speed. Each gear's range overlaps
+ * its neighbours', which is what gives the shift hysteresis — without it the box
+ * hunts between two gears at the crossover speed.
+ */
+const GEARS = [
+  { min: 0, max: 5.4 },
+  { min: 4.5, max: 9.4 },
+  { min: 8.4, max: 14 },
+  { min: 12.8, max: 18.6 },
+  { min: 17.4, max: 23.2 },
+  // Top gear stops just past the car's normal ceiling rather than stretching to
+  // the nitro ceiling: spread over the full boost range, the revs sat near idle
+  // at maximum speed and the engine sounded asleep. Boosting now pins it against
+  // the limiter, which is the right sound for it.
+  { min: 22, max: 28.5 },
+]
+// How long the drive is cut for. Long enough to feel the pause, short enough
+// not to cost the player speed.
+const UPSHIFT_CUT = 0.17
+const DOWNSHIFT_CUT = 0.09
+
 const MAX_STEER = 0.52
 const BOOST_SECONDS = 2.6
 const BOOST_FORCE = 2.1
@@ -235,6 +257,11 @@ export class Car {
     this.grounded = 4
     this.boost = 0
     this.slip = 0
+    this.gear = 0
+    this.rev = 0
+    this.shiftCut = 0
+    // Set to +1 or -1 for the one frame a shift happens, for sound and HUD.
+    this.shifted = 0
     this.airTime = 0
     this.stuckFor = 0
     this.stuckAnchor = null
@@ -268,6 +295,8 @@ export class Car {
     const boosting = this.boost > 0
     const engineScale = boosting ? BOOST_FORCE : 1
 
+    this._updateGearbox(alongForward, Math.abs(input.throttle), dt)
+
     const throttle = input.throttle
     let engine = 0
     let brake = IDLE_BRAKE
@@ -292,6 +321,10 @@ export class Car {
     const slip = input.handbrake ? SLIDE_GRIP : GRIP
     this.vehicle.wheelInfos[2].frictionSlip = slip
     this.vehicle.wheelInfos[3].frictionSlip = slip
+
+    // The clutch is out mid-shift, so drive stops for a moment. This is the
+    // whole point of modelling gears: the pause is what you feel.
+    if (this.shiftCut > 0) engine = 0
 
     // Rear-wheel drive with a little front assist for grip out of corners.
     this.vehicle.applyEngineForce(engine * 0.35, 0)
@@ -370,6 +403,51 @@ export class Car {
     w.x += fwd.x * correct
     w.y += fwd.y * correct
     w.z += fwd.z * correct
+  }
+
+  /**
+   * Pick a gear from road speed and work out where in its band the revs sit.
+   * Speed-banded rather than torque-modelled: the car's handling is arcade, and
+   * a real ratio/RPM model would fight the flat drive force everywhere else.
+   */
+  _updateGearbox(alongForward, effort, dt) {
+    this.shifted = 0
+    if (this.shiftCut > 0) this.shiftCut = Math.max(0, this.shiftCut - dt)
+
+    // Reverse is its own gear, and it only has the one.
+    if (alongForward < -0.5) {
+      if (this.gear !== -1) this.gear = -1
+      this.rev = THREE.MathUtils.clamp(Math.abs(alongForward) / 7 + effort * 0.15, 0.08, 1)
+      return
+    }
+    if (this.gear < 0) this.gear = 0
+
+    const forward = Math.max(0, alongForward)
+    const band = GEARS[this.gear]
+    if (this.shiftCut <= 0) {
+      if (forward > band.max && this.gear < GEARS.length - 1) {
+        this.gear += 1
+        this.shiftCut = UPSHIFT_CUT
+        this.shifted = 1
+      } else if (forward < band.min && this.gear > 0) {
+        this.gear -= 1
+        this.shiftCut = DOWNSHIFT_CUT
+        this.shifted = -1
+      }
+    }
+
+    const now = GEARS[this.gear]
+    const through = (forward - now.min) / (now.max - now.min)
+    // Throttle lifts the needle a little even at a standstill, so blipping it
+    // while parked does something.
+    this.rev = THREE.MathUtils.clamp(through + effort * 0.12, 0.06, 1)
+  }
+
+  /** 'R', 'N' or the gear number, for the readout. */
+  get gearLabel() {
+    if (this.gear < 0) return 'R'
+    if (this.speed < 0.4 && this.gear === 0) return 'N'
+    return String(this.gear + 1)
   }
 
   /**
