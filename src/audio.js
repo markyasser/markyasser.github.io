@@ -132,6 +132,33 @@ export class Audio {
     this.thud(intensity * 1.6)
   }
 
+  /** Nitrous: a rising hiss with a thump under it. */
+  whoosh() {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    const dur = 0.7
+    const len = Math.ceil(this.ctx.sampleRate * dur)
+    const buffer = this.ctx.createBuffer(1, len, this.ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len)
+    const src = this.ctx.createBufferSource()
+    src.buffer = buffer
+    const filter = this.ctx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.setValueAtTime(600, t)
+    filter.frequency.exponentialRampToValueAtTime(5200, t + dur)
+    filter.Q.value = 2.5
+    const gain = this.ctx.createGain()
+    gain.gain.setValueAtTime(0.32, t)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+    src.connect(filter)
+    filter.connect(gain)
+    gain.connect(this.master)
+    src.start(t)
+    src.stop(t + dur)
+    this.thud(1.4)
+  }
+
   /** Rising arpeggio for shard pickups. */
   chime() {
     if (!this.enabled || !this.ctx) return

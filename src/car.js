@@ -22,6 +22,9 @@ const AXLE_Z = 1.38
 const AXLE_X = 0.92
 
 const MAX_STEER = 0.52
+const BOOST_SECONDS = 2.6
+const BOOST_FORCE = 2.1
+const BOOST_TOP = 34
 const ENGINE_FORCE = 560
 const REVERSE_FORCE = 300
 const BRAKE_FORCE = 34
@@ -105,13 +108,25 @@ function buildBody(paint) {
   add(stalk, dark, -0.6, 0.62, -1.9)
   add(stalk, dark, 0.6, 0.62, -1.9)
 
+  // Nitrous flames, hidden until the boost fires.
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0x7fe6ff, transparent: true, opacity: 0.9, toneMapped: false })
+  const flames = []
+  for (const fx of [-0.5, 0.5]) {
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.5, 10), flameMat)
+    flame.rotation.x = Math.PI / 2
+    flame.position.set(fx, -0.02, -BODY.l / 2 - 0.75)
+    flame.visible = false
+    group.add(flame)
+    flames.push(flame)
+  }
+
   // Side mirrors + a racing stripe for a bit of character.
   const mirror = new RoundedBoxGeometry(0.16, 0.1, 0.12, 2, 0.04)
   add(mirror, chrome, -(BODY.w / 2 + 0.04), 0.6, 0.5)
   add(mirror, chrome, BODY.w / 2 + 0.04, 0.6, 0.5)
   add(new THREE.BoxGeometry(0.26, 0.02, BODY.l - 0.5), mat(C.cream), 0, 0.32, 0.1)
 
-  return { group, tailMat, headMat }
+  return { group, tailMat, headMat, flames }
 }
 
 function buildWheel() {
@@ -146,10 +161,11 @@ export class Car {
     this.spawn = spawn.clone()
     this.spawnHeading = 0
 
-    const { group, tailMat, headMat } = buildBody(paint)
+    const { group, tailMat, headMat, flames } = buildBody(paint)
     this.mesh = group
     this.tailMat = tailMat
     this.headMat = headMat
+    this.flames = flames
     scene.add(group)
 
     const chassisShape = new CANNON.Box(new CANNON.Vec3(BODY.w / 2, BODY.h / 2, BODY.l / 2))
@@ -215,6 +231,7 @@ export class Car {
     this.braking = false
     this.airborne = false
     this.grounded = 4
+    this.boost = 0
     this.airTime = 0
     this.stuckFor = 0
     this.stuckAnchor = null
@@ -243,13 +260,18 @@ export class Car {
     this.vehicle.setSteeringValue(this.steering, 0)
     this.vehicle.setSteeringValue(this.steering, 1)
 
+    // Nitrous: more drive and a higher ceiling, for a couple of seconds.
+    if (this.boost > 0) this.boost = Math.max(0, this.boost - dt)
+    const boosting = this.boost > 0
+    const engineScale = boosting ? BOOST_FORCE : 1
+
     const throttle = input.throttle
     let engine = 0
     let brake = IDLE_BRAKE
 
     if (throttle > 0.01) {
       // Pressing forward while rolling backwards should brake first.
-      engine = alongForward < -1 ? 0 : -ENGINE_FORCE * throttle
+      engine = alongForward < -1 ? 0 : -ENGINE_FORCE * throttle * engineScale
       brake = alongForward < -1 ? BRAKE_FORCE : 0
     } else if (throttle < -0.01) {
       engine = alongForward > 1 ? 0 : -REVERSE_FORCE * throttle
@@ -284,8 +306,8 @@ export class Car {
       for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i)
     }
 
-    // Soft top-speed limiter.
-    const max = 21
+    // Soft top-speed limiter, lifted while the nitrous burns.
+    const max = boosting ? BOOST_TOP : 21
     if (this.speed > max) {
       const s = max / this.speed
       v.x *= s
@@ -293,6 +315,14 @@ export class Car {
     }
 
     this.tailMat.emissiveIntensity = this.braking ? 2.6 : 0.6
+
+    for (const flame of this.flames) {
+      flame.visible = boosting
+      if (boosting) {
+        const flicker = 0.7 + Math.random() * 0.6
+        flame.scale.set(flicker, 0.8 + Math.random() * 0.7, flicker)
+      }
+    }
 
     // Gentle downforce keeps the car planted over ramps and crests. The force
     // must be applied at the centre of mass: cannon's second argument is a point
@@ -427,6 +457,11 @@ export class Car {
 
   get position() {
     return this.mesh.position
+  }
+
+  /** Spend a nitrous charge. Re-firing mid-boost refreshes rather than stacks. */
+  igniteBoost() {
+    this.boost = BOOST_SECONDS
   }
 
   /** Forward unit vector in world space. */

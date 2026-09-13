@@ -1,3 +1,5 @@
+import prepitLogo from './assets/prepit-logo.js'
+
 // ---------------------------------------------------------------------------
 // Logo marks, drawn as vector paths at runtime.
 //
@@ -729,6 +731,7 @@ Object.assign(ORG_MARKS, {
 // ---------------------------------------------------------------------------
 
 export const IMAGE_MARKS = {
+  prepit: prepitLogo,
   // cairo: 'data:image/png;base64,...',
   // engineering: 'data:image/png;base64,...',
 }
@@ -754,22 +757,42 @@ export function preloadMarks() {
   )
 }
 
-export function drawOrgMark(ctx, key, x, y, size) {
+/**
+ * Draw a mark in a box `size` tall, returning the width it actually used.
+ *
+ * Real logos are often wordmarks several times wider than they are tall, and
+ * fitting one inside a square shrinks it until it is unreadable. A mark may
+ * therefore run up to `maxWidth` across; callers lay their text out from the
+ * returned width rather than assuming a square.
+ */
+/** The width `drawOrgMark` would use, without drawing anything. */
+export function measureOrgMark(key, size, { maxWidth = size } = {}) {
+  const img = loadedImages.get(key)
+  if (!img) return ORG_MARKS[key] ? size : 0
+  const aspect = img.naturalWidth / img.naturalHeight
+  return Math.min(size * aspect, maxWidth)
+}
+
+export function drawOrgMark(ctx, key, x, y, size, { maxWidth = size } = {}) {
   const img = loadedImages.get(key)
   if (img) {
-    // Fit inside the box, preserving the artwork's aspect.
-    const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight)
-    const w = img.naturalWidth * scale
-    const h = img.naturalHeight * scale
-    ctx.drawImage(img, x + (size - w) / 2, y + (size - h) / 2, w, h)
-    return
+    const aspect = img.naturalWidth / img.naturalHeight
+    let h = size
+    let w = size * aspect
+    if (w > maxWidth) {
+      w = maxWidth
+      h = w / aspect
+    }
+    ctx.drawImage(img, x, y + (size - h) / 2, w, h)
+    return w
   }
   const mark = ORG_MARKS[key]
-  if (!mark) return
+  if (!mark) return 0
   ctx.save()
   ctx.translate(x, y)
   ctx.scale(size, size)
   ctx.lineJoin = 'round'
   mark(ctx)
   ctx.restore()
+  return size
 }

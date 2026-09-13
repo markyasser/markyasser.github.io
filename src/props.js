@@ -241,6 +241,8 @@ export function container({ side, top, end, length, height, width, accent }) {
  * covering the pole, so a clip at speed lays the whole thing flat.
  */
 export function bannerFlag({ texture, poleHeight = 5.2, bannerW = 2.6, bannerH = 1.6 }) {
+  bannerW = bannerW || 2.6
+  bannerH = bannerH || 1.6
   const group = new THREE.Group()
   group.add(meshOf(
     new THREE.CylinderGeometry(0.11, 0.13, poleHeight, 8),
@@ -346,5 +348,216 @@ export function domedHall({
 
   group.userData.half = { x: width / 2, y: (drumY + 1.2) / 2, z: depth / 2 }
   group.userData.centreY = (drumY + 1.2) / 2
+  return group
+}
+
+/**
+ * A clock tower, for beside the university. Like the hall it is a landmark
+ * rather than an obstacle, so it is kept narrow and its body is given a low
+ * centre of mass by the caller.
+ */
+export function clockTower({ height = 13, width = 3, color = 0xc9bda4, trim = 0xe6dcc8, face = 0xf4efe2 }) {
+  const group = new THREE.Group()
+  const stone = std(color, { roughness: 0.9 })
+  const trimMat = std(trim, { roughness: 0.85 })
+
+  const add = (mesh, x, y, z) => {
+    mesh.position.set(x, y, z)
+    group.add(mesh)
+    return mesh
+  }
+
+  add(meshOf(new THREE.BoxGeometry(width * 1.5, 0.4, width * 1.5), trimMat), 0, 0.2, 0)
+  const shaftH = height * 0.66
+  add(meshOf(new RoundedBoxGeometry(width, shaftH, width, 3, 0.08), stone), 0, 0.4 + shaftH / 2, 0)
+
+  // Clock stage, slightly proud of the shaft.
+  const stageY = 0.4 + shaftH + height * 0.09
+  add(meshOf(new THREE.BoxGeometry(width * 1.22, 0.22, width * 1.22), trimMat), 0, 0.4 + shaftH + 0.11, 0)
+  add(meshOf(new RoundedBoxGeometry(width * 1.12, height * 0.18, width * 1.12, 3, 0.06), stone), 0, stageY, 0)
+
+  // A face on all four sides, so it reads from any approach.
+  const faceGeo = new THREE.CircleGeometry(width * 0.4, 24)
+  const faceMat = new THREE.MeshStandardMaterial({
+    color: face, emissive: 0xfff0cf, emissiveIntensity: 0.9, roughness: 0.5,
+  })
+  const handMat = std(0x1b2a45, { roughness: 0.6 })
+  const sides = [
+    [0, 0, width * 0.57, 0],
+    [0, 0, -width * 0.57, Math.PI],
+    [width * 0.57, 0, 0, Math.PI / 2],
+    [-width * 0.57, 0, 0, -Math.PI / 2],
+  ]
+  for (const [fx, , fz, ry] of sides) {
+    const dial = new THREE.Group()
+    dial.add(meshOf(faceGeo, faceMat, { cast: false }))
+    const hour = meshOf(new THREE.BoxGeometry(0.09, width * 0.2, 0.05), handMat, { cast: false })
+    hour.position.set(0, width * 0.1, 0.04)
+    dial.add(hour)
+    const minute = meshOf(new THREE.BoxGeometry(0.07, width * 0.3, 0.05), handMat, { cast: false })
+    minute.position.set(0, width * 0.05, 0.04)
+    minute.rotation.z = -1.9
+    dial.add(minute)
+    dial.position.set(fx, stageY, fz)
+    dial.rotation.y = ry
+    group.add(dial)
+  }
+
+  // Cornice and spire.
+  const topY = stageY + height * 0.09
+  add(meshOf(new THREE.BoxGeometry(width * 1.3, 0.24, width * 1.3), trimMat), 0, topY + 0.12, 0)
+  add(meshOf(new THREE.ConeGeometry(width * 0.78, height * 0.2, 4), trimMat), 0, topY + 0.24 + height * 0.1, 0)
+  add(meshOf(new THREE.SphereGeometry(0.16, 10, 8), std(0xf2ac63)), 0, topY + 0.24 + height * 0.2 + 0.1, 0)
+
+  group.userData.half = { x: width * 0.75, y: (topY + height * 0.3) / 2, z: width * 0.75 }
+  return group
+}
+
+/** A football, and the posts to put it between. */
+export function football(radius = 0.55) {
+  const group = new THREE.Group()
+  const ball = meshOf(new THREE.IcosahedronGeometry(radius, 1), std(0xf2f6ff, { roughness: 0.55 }))
+  group.add(ball)
+  // Dark pentagon-ish patches, enough to read as a football while it spins.
+  const patch = new THREE.IcosahedronGeometry(radius * 0.42, 0)
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI * 2 * i) / 6
+    const tilt = i % 2 ? 0.7 : -0.7
+    const p = meshOf(patch, std(0x1b2a45, { roughness: 0.7 }), { cast: false })
+    p.position.set(
+      Math.cos(a) * radius * 0.88,
+      Math.sin(tilt) * radius * 0.8,
+      Math.sin(a) * radius * 0.88
+    )
+    p.scale.set(1, 0.4, 1)
+    p.lookAt(0, 0, 0)
+    group.add(p)
+  }
+  return group
+}
+
+export function goalPosts({ width = 10, height = 3.4, depth = 2.6 }) {
+  const group = new THREE.Group()
+  const frame = std(0xeef4ff, { roughness: 0.4, metalness: 0.3 })
+  const bar = new THREE.CylinderGeometry(0.17, 0.17, 1, 10)
+
+  const post = (x) => {
+    const m = meshOf(bar, frame)
+    m.scale.y = height
+    m.position.set(x, height / 2, 0)
+    group.add(m)
+  }
+  post(-width / 2)
+  post(width / 2)
+
+  const cross = meshOf(bar, frame)
+  cross.scale.y = width
+  cross.rotation.z = Math.PI / 2
+  cross.position.y = height
+  group.add(cross)
+
+  // Net: a grid of thin lines on the back and sides, cheap and readable.
+  const netMat = new THREE.MeshBasicMaterial({
+    color: 0xdce8ff, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false,
+  })
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(width, height), netMat)
+  back.position.set(0, height / 2, -depth)
+  group.add(back)
+  for (const sx of [-1, 1]) {
+    const side = new THREE.Mesh(new THREE.PlaneGeometry(depth, height), netMat)
+    side.rotation.y = Math.PI / 2
+    side.position.set((sx * width) / 2, height / 2, -depth / 2)
+    group.add(side)
+  }
+  return group
+}
+
+/** A phone box. Hit it and it gives you the number. */
+export function phoneBox({ color = 0xd23b2e }) {
+  const group = new THREE.Group()
+  const body = std(color, { roughness: 0.6 })
+  const glass = new THREE.MeshStandardMaterial({
+    color: 0x9fd4e8, roughness: 0.1, metalness: 0.4, transparent: true, opacity: 0.5,
+  })
+  const w = 1.5
+  const h = 4.2
+
+  group.add(meshOf(new THREE.BoxGeometry(w + 0.3, 0.2, w + 0.3), body)).position.y = 0.1
+  // Four corner pillars and a roof, with glazing between.
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const p = meshOf(new THREE.BoxGeometry(0.22, h, 0.22), body)
+    p.position.set((sx * w) / 2, h / 2 + 0.2, (sz * w) / 2)
+    group.add(p)
+  }
+  for (const [dx, dz, ry] of [[0, w / 2, 0], [0, -w / 2, 0], [w / 2, 0, Math.PI / 2], [-w / 2, 0, Math.PI / 2]]) {
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.25, h - 0.9), glass)
+    pane.position.set(dx, h / 2 + 0.4, dz)
+    pane.rotation.y = ry
+    group.add(pane)
+  }
+  const roof = meshOf(new RoundedBoxGeometry(w + 0.35, 0.45, w + 0.35, 3, 0.1), body)
+  roof.position.y = h + 0.35
+  group.add(roof)
+
+  const sign = meshOf(new THREE.BoxGeometry(w - 0.1, 0.42, 0.08), std(0xfff0cf, {
+    emissive: 0xffd79a, emissiveIntensity: 1.6, roughness: 0.4,
+  }), { cast: false })
+  sign.position.set(0, h + 0.02, w / 2 + 0.02)
+  group.add(sign)
+  const signBack = sign.clone()
+  signBack.position.z = -w / 2 - 0.02
+  group.add(signBack)
+
+  group.userData.half = { x: (w + 0.35) / 2, y: (h + 0.6) / 2, z: (w + 0.35) / 2 }
+  return group
+}
+
+/** A post box. Hit it and the mail goes everywhere. */
+export function mailbox({ color = 0xef7360 }) {
+  const group = new THREE.Group()
+  const body = std(color, { roughness: 0.6 })
+  const dark = std(0x1b2a45, { roughness: 0.7 })
+
+  const post = meshOf(new THREE.CylinderGeometry(0.16, 0.2, 1.5, 10), dark)
+  post.position.y = 0.75
+  group.add(post)
+
+  const box = meshOf(new RoundedBoxGeometry(1.4, 1.5, 1.1, 4, 0.28), body)
+  box.position.y = 2.2
+  group.add(box)
+
+  // Slot and a small hood over it.
+  const slot = meshOf(new THREE.BoxGeometry(0.9, 0.13, 0.1), dark, { cast: false })
+  slot.position.set(0, 2.5, 0.56)
+  group.add(slot)
+  const hood = meshOf(new THREE.BoxGeometry(1.05, 0.1, 0.22), dark, { cast: false })
+  hood.position.set(0, 2.62, 0.6)
+  group.add(hood)
+
+  const band = meshOf(new THREE.BoxGeometry(1.42, 0.12, 1.12), std(0xeef4ff, { roughness: 0.6 }), { cast: false })
+  band.position.y = 1.62
+  group.add(band)
+
+  group.userData.half = { x: 0.75, y: 1.5, z: 0.6 }
+  return group
+}
+
+/** A nitrous canister: collect it, spend it on the ramps. */
+export function nitroCanister() {
+  const group = new THREE.Group()
+  const shell = new THREE.MeshStandardMaterial({
+    color: 0x64e0ff, emissive: 0x2bb8e8, emissiveIntensity: 1.5, roughness: 0.25, metalness: 0.5,
+  })
+  const body = meshOf(new THREE.CapsuleGeometry(0.34, 0.9, 6, 12), shell)
+  group.add(body)
+  const cap = meshOf(new THREE.CylinderGeometry(0.16, 0.16, 0.3, 8), std(0xeef4ff, { metalness: 0.6, roughness: 0.3 }))
+  cap.position.y = 0.82
+  group.add(cap)
+  for (const y of [-0.25, 0.25]) {
+    const ring = meshOf(new THREE.TorusGeometry(0.35, 0.05, 6, 16), std(0x0b3a4d))
+    ring.rotation.x = Math.PI / 2
+    ring.position.y = y
+    group.add(ring)
+  }
   return group
 }

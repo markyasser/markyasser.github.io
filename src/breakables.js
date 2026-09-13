@@ -16,6 +16,9 @@ import { STATIC_GROUP } from './props.js'
 const DEBRIS_POOL = 110
 const DEBRIS_LIFE = 5.5
 const PARKED = new THREE.Vector3(0, -500, 0)
+// The crate material's resting emissive, restored once a flash decays.
+const BASE_EMISSIVE = 0.12
+const FLASH_SECONDS = 0.9
 
 const scratchMatrix = new THREE.Matrix4()
 const scratchBody = new THREE.Matrix4()
@@ -139,11 +142,30 @@ export class Breakables {
   }
 
   /** Register something built elsewhere (a crate, a barrel) as breakable. */
-  adopt(body, mesh, { breakAt, chunkColor, chunks = 6, chunkSize = 0.32 }) {
-    const item = { body, mesh, parts: [], breakAt, chunkColor, chunks, chunkSize, broken: false, dead: false }
+  adopt(body, mesh, { breakAt, chunkColor, chunks = 6, chunkSize = 0.32, flashable = false }) {
+    const item = {
+      body, mesh, parts: [], breakAt, chunkColor, chunks, chunkSize,
+      flashable, flash: 0, broken: false, dead: false,
+    }
     this.items.push(item)
     this.byBody.set(body, item)
     return item
+  }
+
+  /**
+   * Light a prop up and set it spinning when the car clips it without breaking
+   * it. On the skill crates this is what makes the logo legible: struck square
+   * on, a crate would otherwise slide away still face-down.
+   */
+  flash(body) {
+    const item = this.byBody.get(body)
+    if (!item || !item.flashable || item.dead) return
+    item.flash = FLASH_SECONDS
+    const b = item.body
+    b.wakeUp()
+    b.angularVelocity.x += (Math.random() - 0.5) * 9
+    b.angularVelocity.y += (Math.random() - 0.5) * 9
+    b.angularVelocity.z += (Math.random() - 0.5) * 9
   }
 
   // ---------------------------------------------------------------- impacts
@@ -154,7 +176,10 @@ export class Breakables {
   impact(body, speed) {
     const item = this.byBody.get(body)
     if (!item || item.broken) return null
-    if (speed < item.breakAt) return { broke: false, item }
+    if (speed < item.breakAt) {
+      this.flash(body)
+      return { broke: false, item }
+    }
     // Flagged now so repeat contacts in the same step don't queue it twice; the
     // work happens in update(), once the step has finished.
     item.broken = true
@@ -302,6 +327,23 @@ export class Breakables {
     }
     for (const pool of this.dirtyPools) pool.flush()
     this.dirtyPools.clear()
+
+    // Decay any flashes: a strobe on the emissive plus a scale pop, so a
+    // struck crate announces its logo instead of quietly sliding away.
+    for (const item of this.items) {
+      if (!item.flash || item.dead) continue
+      item.flash = Math.max(0, item.flash - dt)
+      const t = item.flash / FLASH_SECONDS
+      const strobe = t > 0 ? (Math.sin(item.flash * 38) * 0.5 + 0.5) * t : 0
+
+      const mats = Array.isArray(item.mesh.material) ? item.mesh.material : [item.mesh.material]
+      for (const m of mats) {
+        if (m.emissiveIntensity === undefined) continue
+        m.emissiveIntensity = BASE_EMISSIVE + strobe * 3.2
+      }
+      const pop = 1 + t * 0.28
+      item.mesh.scale.setScalar(pop)
+    }
 
     let debrisDirty = false
     for (const piece of this.debris) {

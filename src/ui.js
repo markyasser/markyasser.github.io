@@ -35,6 +35,8 @@ export class UI {
     this.promptText = document.getElementById('prompt-text')
     this.gauge = document.getElementById('gauge-value')
     this.shardEl = document.getElementById('shard-value')
+    this.nitroEl = document.getElementById('nitro-value')
+    this.nitroBox = document.getElementById('nitro-count')
     this.toastStack = document.getElementById('toast-stack')
     this.resume = document.getElementById('resume')
     this.touch = document.getElementById('touch')
@@ -46,7 +48,8 @@ export class UI {
          Prefer plain text? Tap <b>CV</b> in the top bar.`
       : `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows to drive &nbsp;·&nbsp;
          <kbd>Space</kbd> handbrake &nbsp;·&nbsp; <kbd>E</kbd> to read &nbsp;·&nbsp; <kbd>R</kbd> to reset<br>
-         Scroll to zoom out. Everything you can see can be knocked over.<br>
+         <kbd>Shift</kbd> nitro &nbsp;·&nbsp; scroll to zoom out<br>
+         Everything you can see can be knocked over.<br>
          Prefer plain text? Hit <b>CV</b> in the top bar.`
 
     this.startBtn.addEventListener('click', () => this.onStart())
@@ -113,6 +116,7 @@ export class UI {
 
   <div class="gauge"><b id="gauge-value">0</b><span>km/h</span></div>
   <div class="shard-count"><i>◆</i><span id="shard-value">0 / 10</span></div>
+  <div class="nitro-count" id="nitro-count"><i>⚡</i><span id="nitro-value">0</span><b>NITRO</b></div>
 
   <div id="minimap-wrap"><canvas id="minimap" width="296" height="296"></canvas></div>
 
@@ -126,6 +130,7 @@ export class UI {
   <button class="pad" id="btn-forward">▲</button>
   <button class="pad" id="btn-back">▼</button>
   <button class="pad" id="btn-brake">HOLD</button>
+  <button class="pad" id="btn-nitro">⚡</button>
 </div>
 
 <aside id="panel" aria-live="polite">
@@ -204,6 +209,11 @@ export class UI {
 
   setShards(found, total) {
     this.shardEl.textContent = `${found} / ${total}`
+  }
+
+  setNitro(count) {
+    this.nitroEl.textContent = String(count)
+    this.nitroBox.classList.toggle('ready', count > 0)
   }
 
   showPrompt(text, action) {
@@ -352,6 +362,43 @@ export class UI {
     })
   }
 
+  openPhone() {
+    this._open({
+      kicker: 'Phone box',
+      title: 'Give me a ring',
+      sub: `${esc(PROFILE.location)} · usually reachable`,
+      body: `
+        <div class="big-number">${esc(PROFILE.phone)}</div>
+        <div class="link-list">
+          <a class="link-btn" href="tel:${esc(PROFILE.phone.replace(/\s/g, ''))}" style="background:var(--teal);color:#07231f">
+            <span class="ic">${ICONS.phone}</span>
+            <span><b>Call now</b><small>Opens your dialler</small></span>
+          </a>
+        </div>`,
+    })
+  }
+
+  openEmail() {
+    this._open({
+      kicker: 'Post box',
+      title: 'Send me a mail',
+      sub: 'I read everything that lands here.',
+      body: `
+        <div class="big-number small">${esc(PROFILE.email)}</div>
+        <div class="link-list">
+          <a class="link-btn" href="mailto:${esc(PROFILE.email)}?subject=${encodeURIComponent('Hello Mark')}"
+             style="background:var(--coral);color:#2a0c06">
+            <span class="ic">${ICONS.email}</span>
+            <span><b>Send email</b><small>Opens your mail app</small></span>
+          </a>
+          <a class="link-btn" href="${esc(PROFILE.linkedin)}" target="_blank" rel="noopener">
+            <span class="ic">${ICONS.linkedin}</span>
+            <span><b>Or message on LinkedIn</b><small>mark-yasser</small></span>
+          </a>
+        </div>`,
+    })
+  }
+
   openStunt() {
     this._open({
       kicker: 'Off the clock',
@@ -375,16 +422,25 @@ export class UI {
           <li><b>W / ↑</b> accelerate · <b>S / ↓</b> brake and reverse</li>
           <li><b>A / ←</b> and <b>D / →</b> steer</li>
           <li><b>Space</b> handbrake · <b>R</b> reset the car</li>
+          <li><b>Shift</b> burns a nitro charge — collect the blue canisters, then hit the ramps</li>
           <li><b>C</b> cycles the camera: follow, overhead, and a chase view that sits behind the car</li>
           <li><b>Scroll</b> (or pinch, or <b>+</b> / <b>&minus;</b>) to zoom the camera out over the map</li>
           <li><b>E</b> or <b>Enter</b> opens whatever you are parked next to</li>
           <li>A gamepad works too — left stick and triggers</li>
           <li>On a phone, use the on-screen pads</li>
         </ul>
+        <h4>Things to find</h4>
+        <ul>
+          <li>Ten <b>◆ shards</b> along the experience avenue and the skills yard, each a fact about the work</li>
+          <li><b>⚡ Nitro</b> canisters, mostly on the run out to the stunt park. They come back after a while</li>
+          <li>A <b>football</b> and a goal out west. Nudge it in</li>
+          <li>A <b>phone box</b> and a <b>post box</b> at the contact plaza — drive into either one</li>
+        </ul>
         <h4>Everything is solid</h4>
-        <p>Trees, rocks, lamps, barrels and every skill crate can be shoved,
-        knocked over and smashed. Hit something hard enough and it breaks apart.
-        Nothing you wreck matters — it is all scenery.</p>
+        <p>Trees, rocks, lamps, barrels and containers can all be shoved and
+        knocked over, and most of them break apart if you hit them hard enough.
+        Clip a skill crate and it lights up and tumbles so you can read its logo;
+        only a full-speed charge destroys one. Nothing you wreck matters.</p>
         <h4>Not here to play?</h4>
         <p>The <b>CV</b> button in the top bar shows the whole résumé as plain, selectable, printable text.</p>`,
     })

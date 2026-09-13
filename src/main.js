@@ -91,6 +91,7 @@ class App {
     this.controls.on('interact', () => this.interact())
     this.controls.on('reset', () => this.resetCar())
     this.controls.on('camera', () => this.cycleCamera())
+    this.controls.on('nitro', () => this.useNitro())
     this.controls.bindTouch(document)
 
     this._build()
@@ -181,12 +182,16 @@ class App {
       ground: new CANNON.Material('ground'),
       car: new CANNON.Material('car'),
       prop: new CANNON.Material('prop'),
+      ball: new CANNON.Material('ball'),
     }
     const add = (a, b, opts) => this.world.addContactMaterial(new CANNON.ContactMaterial(a, b, opts))
     add(this.materials.ground, this.materials.car, { friction: 0.04, restitution: 0.05 })
     add(this.materials.ground, this.materials.prop, { friction: 0.26, restitution: 0.1 })
     add(this.materials.car, this.materials.prop, { friction: 0.1, restitution: 0.25 })
-    add(this.materials.prop, this.materials.prop, { friction: 0.22, restitution: 0.15 })
+    add(this.materials.prop, this.materials.prop, { friction: 0.14, restitution: 0.18 })
+    add(this.materials.ground, this.materials.ball, { friction: 0.12, restitution: 0.55 })
+    add(this.materials.car, this.materials.ball, { friction: 0.05, restitution: 0.72 })
+    add(this.materials.prop, this.materials.ball, { friction: 0.1, restitution: 0.6 })
   }
 
   async _build() {
@@ -228,6 +233,8 @@ class App {
     await step(0.84, 'Warming the engine…')
     this.minimap = new Minimap(document.getElementById('minimap'), { shards: this.worldRefs.shards })
     this.ui.setShards(0, this.worldRefs.shards.length)
+    this.nitro = 0
+    this.ui.setNitro(0)
 
     // Pre-compile shaders against the real camera so the first frame is clean.
     this.camera.position.set(0, 8, 44)
@@ -304,6 +311,28 @@ class App {
     // raw velocity counts a car sliding past a wall as a collision.
     const impact = Math.abs(event.contact.getImpactVelocityAlongNormal())
     if (impact < 1.8) return
+
+    // Props that answer back when hit.
+    const special = this.worldRefs.specials.get(other)
+    if (special && impact > 2.4) {
+      const now = performance.now()
+      if (now - (this._lastSpecial || 0) > 1200) {
+        this._lastSpecial = now
+        if (special.kind === 'phone') {
+          this.ui.openPhone()
+        } else if (special.kind === 'mail') {
+          // Mail goes everywhere.
+          this.worldRefs.breakables.puff(
+            new THREE.Vector3(other.position.x, other.position.y + 1.2, other.position.z),
+            { count: 10, size: 0.5, color: 0xf2f6ff, speed: 7 }
+          )
+          this.ui.openEmail()
+        }
+        this.audio.thud(2)
+        this._shake(0.4)
+        return
+      }
+    }
 
     const result = this.worldRefs.breakables.impact(other, impact)
     if (result && result.broke) {
@@ -387,6 +416,8 @@ class App {
       this.worldRefs.syncDynamics()
       this.worldRefs.breakables.update(dt)
       this._checkShards()
+      this._checkNitro(dt)
+      this._checkGoal()
       this._checkPOI()
       this._guardBounds()
 
@@ -523,6 +554,63 @@ class App {
         setTimeout(() => this.ui.toast('All shards found. That is the whole CV — thanks for driving.', 7000), 800)
       }
     }
+  }
+
+  /** Spend a charge, if there is one. */
+  useNitro() {
+    if (!this.running || this.nitro <= 0) return
+    if (this.car.boost > 1.4) return
+    this.nitro -= 1
+    this.ui.setNitro(this.nitro)
+    this.car.igniteBoost()
+    this.audio.whoosh()
+  }
+
+  _checkNitro(dt) {
+    const p = this.car.position
+    for (const n of this.worldRefs.nitros) {
+      if (n.collected) {
+        // Canisters come back, so the stunt park never runs dry.
+        n.respawn -= dt
+        if (n.respawn <= 0) {
+          n.collected = false
+          n.mesh.visible = true
+          n.halo.visible = true
+        }
+        continue
+      }
+      if (p.distanceToSquared(n.position) > 25) continue
+      n.collected = true
+      n.respawn = 18
+      n.mesh.visible = false
+      n.halo.visible = false
+      this.nitro = Math.min(5, this.nitro + 1)
+      this.ui.setNitro(this.nitro)
+      this.audio.chime()
+      if (this.nitro === 1) this.ui.toast('Nitro collected — press Shift to burn it.', 3600)
+    }
+  }
+
+  /** Has the ball gone in? */
+  _checkGoal() {
+    const fb = this.worldRefs.football
+    if (!fb) return
+    const p = fb.body.position
+    const g = fb.goal
+    const inMouth =
+      Math.abs(p.x - g.x) < g.halfW &&
+      p.y < g.height &&
+      p.z < g.z + 0.3 &&
+      p.z > g.z - g.depth
+    if (inMouth) {
+      fb.scored += 1
+      this.ui.toast(`⚽ GOAL! That's ${fb.scored}.`, 3200)
+      this.audio.chime()
+      this.worldRefs.resetBall()
+      return
+    }
+    // Booted out of the world: put it back rather than lose it.
+    if (p.y < -3 || Math.hypot(p.x - g.x, p.z - g.z) > 140) this.worldRefs.resetBall()
   }
 
   _checkPOI() {

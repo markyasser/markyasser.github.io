@@ -19,6 +19,7 @@ marking is drawn into a canvas at runtime, so the entire site is one JS bundle.
 | West | Cairo University | Degree, honours, and a graduation cap you can knock off the roof |
 | South | Contact | GitHub, LinkedIn and email containers |
 | North-east | Stunt park | Ramps, barrels, bowling pins |
+| West | Kick-about | A football and a goal |
 
 Ten glowing shards line the routes through the experience avenue and the skills
 yard; each one reveals a fact about the work. They sit on the way *into* the
@@ -35,6 +36,8 @@ into pieces when hit hard enough.
 - **Scroll**, pinch, or **+** / **&minus;** to zoom the camera out over the map
 - **E** or **Enter** opens whatever you are parked next to
 - **R** resets the car, **C** cycles the camera (follow / overhead / chase)
+- **Shift** burns a nitro charge: roughly double the drive force and a 34 m/s
+  ceiling for a couple of seconds, which is what the stunt ramps want
 - Gamepad: left stick and triggers
 - Touch: on-screen pads appear automatically
 
@@ -75,7 +78,9 @@ ground — cannon treats a body's origin as its centre of mass, so the collision
 box is offset upward from it — which gives it the weight distribution of masonry:
 a hit shifts it a little and never tips it over.
 
-The only immovable things in the world are the boundary and the stunt ramps. The
+The only immovable things in the world are the boundary, the stunt ramps and the
+goal frame — all of them terrain you play *against* rather than props, and all of
+them unusable if they slid away when hit. The
 ramps stay fixed because they are terrain you drive *on*; a ramp that slid away
 when you hit it would be unusable. Everything else — every container, banner,
 crate, barrel, cone, tree, rock and street lamp — has mass and reacts.

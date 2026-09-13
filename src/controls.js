@@ -9,7 +9,7 @@ export class Controls {
     this.hasDriven = false
     // Camera zoom multiplier, remembered between visits.
     this.zoom = clampZoom(Number(readStored('zoom')) || 1)
-    this._listeners = { interact: [], reset: [], camera: [] }
+    this._listeners = { interact: [], reset: [], camera: [], nitro: [] }
 
     this._onKeyDown = (e) => {
       const k = e.key.toLowerCase()
@@ -19,6 +19,7 @@ export class Controls {
       if (k === 'e' || k === 'enter') this._emit('interact')
       if (k === 'r') this._emit('reset')
       if (k === 'c') this._emit('camera')
+      if (k === 'shift') this._emit('nitro')
       if (k === '+' || k === '=') this.setZoom(this.zoom / 1.12)
       if (k === '-' || k === '_') this.setZoom(this.zoom * 1.12)
     }
@@ -77,6 +78,14 @@ export class Controls {
       'btn-right': 'right',
       'btn-brake': 'brake',
     }
+    const nitro = root.querySelector('#btn-nitro')
+    if (nitro) {
+      nitro.addEventListener('pointerdown', (e) => {
+        e.preventDefault()
+        this._emit('nitro')
+      })
+    }
+
     for (const [id, key] of Object.entries(map)) {
       const el = root.querySelector('#' + id)
       if (!el) continue

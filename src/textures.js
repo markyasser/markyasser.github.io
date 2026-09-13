@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { CSS } from './palette.js'
-import { drawMark, drawOrgMark, drawFlag, markKey, brandColor } from './logos.js'
+import { drawMark, drawOrgMark, measureOrgMark, drawFlag, markKey, brandColor } from './logos.js'
 
 const FONT_STACK = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 const cache = new Map()
@@ -331,8 +331,10 @@ export function containerSideTexture(renderer, {
   let inner = width * 0.84
   if (org) {
     const markSize = plateH * 0.78
-    drawOrgMark(ctx, org, width * 0.075, plateY + (plateH - markSize) / 2, markSize)
-    const used = width * 0.075 + markSize + width * 0.03
+    const drawn = drawOrgMark(ctx, org, width * 0.075, plateY + (plateH - markSize) / 2, markSize, {
+      maxWidth: width * 0.42,
+    })
+    const used = width * 0.075 + drawn + width * 0.03
     textCentre = used + (width * 0.955 - used) / 2
     inner = (width * 0.955 - used) * 0.94
   }
@@ -414,8 +416,10 @@ export function containerTopTexture(renderer, {
   let inner = width * 0.86
   if (org) {
     const markSize = height * 0.56
-    drawOrgMark(ctx, org, width * 0.075, (height - markSize) / 2, markSize)
-    const used = width * 0.075 + markSize + width * 0.03
+    const drawn = drawOrgMark(ctx, org, width * 0.075, (height - markSize) / 2, markSize, {
+      maxWidth: width * 0.42,
+    })
+    const used = width * 0.075 + drawn + width * 0.03
     centre = used + (width * 0.94 - used) / 2
     inner = (width * 0.94 - used) * 0.92
   }
@@ -530,8 +534,11 @@ export function logoFlagTexture(renderer, { org, title, color = '#8f83f7', width
   roundRect(ctx, width * 0.1, height * 0.06, width * 0.86, height * 0.88, 18)
   ctx.fill()
 
-  const markSize = height * 0.52
-  drawOrgMark(ctx, org, (width - markSize) / 2 + width * 0.03, height * 0.1, markSize)
+  // Measure first, so a wide wordmark lands centred instead of being drawn and
+  // then shuffled across the canvas.
+  const markSize = height * 0.5
+  const markW = measureOrgMark(org, markSize, { maxWidth: width * 0.74 })
+  drawOrgMark(ctx, org, width * 0.53 - markW / 2, height * 0.12, markSize, { maxWidth: width * 0.74 })
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'

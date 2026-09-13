@@ -52,10 +52,14 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   const animated = []
   // Footprints that scenery must not spawn inside.
   const obstacles = []
+  // Props that do something when the car hits them, keyed by their body.
+  const specials = new Map()
+  const nitros = []
   const root = new THREE.Group()
   scene.add(root)
 
   const breakables = new Breakables({ scene: root, world, material: materials.prop, onBreak })
+  let football = null
 
   const addPOI = (poi) => {
     pois.push({ radius: 11, ...poi })
@@ -159,6 +163,10 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   // ---------------------------------------------------------- stunt park
   buildStuntPark()
 
+  // ------------------------------------------------------------ diversions
+  buildFootball()
+  buildNitro()
+
   // ------------------------------------------------------------- scenery
   scatterScenery()
   buildShards()
@@ -229,10 +237,12 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   }
 
   /** A banner on a pole. Marks a zone, and folds flat when you clip it. */
-  function addFlag({ x, z, rotY = 0, title, color, texture, height = 5.2 }) {
+  function addFlag({ x, z, rotY = 0, title, color, texture, height = 5.2, bannerW, bannerH }) {
     const group = P.bannerFlag({
       texture: texture || bannerTexture(renderer, { title, color: hex(color) }),
       poleHeight: height,
+      bannerW,
+      bannerH,
     })
     group.position.set(x, height / 2, z)
     group.rotation.y = rotY
@@ -240,7 +250,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
 
     const body = P.boxBody({
       world,
-      size: { x: 1.7, y: height, z: 0.6 },
+      size: { x: Math.max(1.7, (bannerW || 2.6) * 0.7), y: height, z: 0.6 },
       position: { x, y: height / 2, z },
       mass: 16,
       material: materials.prop,
@@ -320,7 +330,12 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       accent: job.accent,
     })
 
-    addFlag({ x: x + facing * 5, z: z - 8, rotY: facing === 1 ? 0 : Math.PI, title: job.company, color: job.accent })
+    addFlag({
+      x: x + facing * 5, z: z - 8, rotY: facing === 1 ? 0 : Math.PI,
+      title: job.company,
+      texture: logoFlagTexture(renderer, { org: job.logo, title: job.company, color: hex(job.accent) }),
+      height: 6.4, bannerW: 3.8, bannerH: 2.4,
+    })
 
     addPOI({
       id: job.id,
@@ -430,14 +445,20 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
           world,
           size: { x: size, y: size, z: size },
           position: pos,
-          mass: 2.6,
+          // Light, because they no longer shatter on contact: a heavier crate
+          // that survives the hit just piles up and stops the car dead.
+          mass: 1.5,
           material: materials.prop,
           quaternion: new CANNON.Quaternion().setFromEuler(0, mesh.rotation.y, 0),
         })
-        body.angularDamping = 0.25
+        body.angularDamping = 0.18
         dynamics.push({ mesh, body })
+        // Skill crates take a lot to destroy. At the old threshold any normal
+        // approach shattered them instantly, so the logo never got a chance to
+        // be read — the point of hitting one is that it lights up and tumbles.
+        // Only a deliberate full-speed charge breaks them now.
         breakables.adopt(body, mesh, {
-          breakAt: 5.5, chunkColor: group.color, chunks: 7, chunkSize: 0.8,
+          breakAt: 16, chunkColor: group.color, chunks: 7, chunkSize: 0.8, flashable: true,
         })
       })
     })
@@ -491,7 +512,34 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       accent: C.violet,
     })
 
-    // The graduation cap, now sitting on the honours container.
+    // A clock tower beside the hall, sharing its low-centre-of-mass trick.
+    const tower = P.clockTower({ height: 13, width: 3 })
+    const th = tower.userData.half
+    tower.position.set(cx - 9, 0, cz + 7)
+    root.add(tower)
+    const towerComY = 0.5
+    const towerBody = new CANNON.Body({
+      mass: 320,
+      material: materials.prop,
+      position: new CANNON.Vec3(cx - 9, towerComY, cz + 7),
+      angularDamping: 0.9,
+      linearDamping: 0.15,
+      allowSleep: true,
+      sleepSpeedLimit: 0.3,
+      sleepTimeLimit: 0.5,
+    })
+    towerBody.addShape(
+      new CANNON.Box(new CANNON.Vec3(th.x, th.y, th.z)),
+      new CANNON.Vec3(0, th.y - towerComY, 0)
+    )
+    world.addBody(towerBody)
+    towerBody.updateAABB()
+    dynamics.push({ mesh: tower, body: towerBody, yOffset: -towerComY })
+    obstacles.push({ x: cx - 9, z: cz + 7, r: 6 })
+
+    // The graduation cap sits on the ground beside the honours container now,
+    // where it can be knocked about. It is never registered as breakable — a
+    // cap that shatters would just be litter.
     const cap = new THREE.Group()
     cap.add(P.meshOf(new THREE.CylinderGeometry(1.2, 1.4, 1.1, 16), P.std(C.navy)))
     const board = P.meshOf(new THREE.BoxGeometry(4.4, 0.3, 4.4), P.std(C.navy))
@@ -501,24 +549,27 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const button = P.meshOf(new THREE.SphereGeometry(0.22, 10, 8), P.std(C.amber))
     button.position.y = 0.92
     cap.add(button)
-    cap.position.set(cx + 1, 4.2, cz - 10)
+    const capPos = { x: cx + 8, y: 0.85, z: cz - 11 }
+    cap.position.set(capPos.x, capPos.y, capPos.z)
     root.add(cap)
     const capBody = P.boxBody({
-      world, size: { x: 4.2, y: 1.6, z: 4.2 }, position: { x: cx + 1, y: 4.2, z: cz - 10 },
-      mass: 45, material: materials.prop,
+      world, size: { x: 4.2, y: 1.5, z: 4.2 }, position: capPos, mass: 38, material: materials.prop,
     })
+    capBody.angularDamping = 0.5
     dynamics.push({ mesh: cap, body: capBody })
 
     // The two crests, as flags either side of the approach.
     addFlag({
-      x: cx + 12, z: cz + 8,
+      x: cx + 13, z: cz + 9,
       title: 'Cairo University',
       texture: logoFlagTexture(renderer, { org: 'cairo', title: 'Cairo University', color: hex(C.violet) }),
+      height: 7.4, bannerW: 4.6, bannerH: 2.9,
     })
     addFlag({
-      x: cx + 12, z: cz - 8,
+      x: cx + 13, z: cz - 9,
       title: 'Faculty of Engineering',
       texture: logoFlagTexture(renderer, { org: 'engineering', title: 'Faculty of Engineering', color: hex(C.blue) }),
+      height: 7.4, bannerW: 4.6, bannerH: 2.9,
     })
 
     buildLanguages(cx, cz + 19)
@@ -576,6 +627,35 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
         title: link.label,
       })
     })
+
+    // A phone box and a post box, both of which answer when hit.
+    const phone = P.phoneBox({})
+    phone.position.set(cx - 26, 0, cz - 12)
+    root.add(phone)
+    const ph = phone.userData.half
+    const phoneBody = P.boxBody({
+      world, size: { x: ph.x * 2, y: ph.y * 2, z: ph.z * 2 },
+      position: { x: cx - 26, y: ph.y, z: cz - 12 }, mass: 70, material: materials.prop,
+    })
+    phoneBody.angularDamping = 0.55
+    dynamics.push({ mesh: phone, body: phoneBody, yOffset: -ph.y })
+    specials.set(phoneBody, { kind: 'phone' })
+    addLabel('PHONE', new THREE.Vector3(cx - 26, 7, cz - 12), { height: 0.8, bg: 'rgba(210,59,46,0.95)' })
+    obstacles.push({ x: cx - 26, z: cz - 12, r: 5 })
+
+    const post = P.mailbox({})
+    post.position.set(cx + 26, 0, cz - 12)
+    root.add(post)
+    const mh = post.userData.half
+    const postBody = P.boxBody({
+      world, size: { x: mh.x * 2, y: mh.y * 2, z: mh.z * 2 },
+      position: { x: cx + 26, y: 1.7, z: cz - 12 }, mass: 45, material: materials.prop,
+    })
+    postBody.angularDamping = 0.55
+    dynamics.push({ mesh: post, body: postBody, yOffset: -1.7 })
+    specials.set(postBody, { kind: 'mail' })
+    addLabel('POST', new THREE.Vector3(cx + 26, 6, cz - 12), { height: 0.8, bg: 'rgba(239,115,96,0.95)' })
+    obstacles.push({ x: cx + 26, z: cz - 12, r: 5 })
 
     addPOI({
       id: 'contact',
@@ -691,6 +771,88 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     })
     dynamics.push({ mesh, body, yOffset: -0.6 })
     breakables.adopt(body, mesh, { breakAt: 6, chunkColor: color, chunks: 6, chunkSize: 0.8 })
+  }
+
+  // --- Football ----------------------------------------------------------
+  /**
+   * A pitch in the empty western quarter. The ball is light, bouncy and low
+   * friction, so it actually goes somewhere when the car clips it.
+   */
+  function buildFootball() {
+    const cx = -72
+    const cz = -44
+    const goalZ = cz - 14
+    const goalW = 11
+
+    const goal = P.goalPosts({ width: goalW, height: 3.6, depth: 3 })
+    goal.position.set(cx, 0, goalZ)
+    root.add(goal)
+    // The frame is solid; the mouth between the posts is not.
+    for (const sx of [-1, 1]) {
+      P.boxBody({
+        world,
+        size: { x: 0.5, y: 3.6, z: 0.5 },
+        position: { x: cx + (sx * goalW) / 2, y: 1.8, z: goalZ },
+        mass: 0,
+        material: materials.ground,
+      })
+    }
+
+    const ballStart = { x: cx, y: 0.6, z: cz + 6 }
+    const ballMesh = P.football(0.55)
+    ballMesh.position.set(ballStart.x, ballStart.y, ballStart.z)
+    root.add(ballMesh)
+    const ballBody = new CANNON.Body({
+      mass: 2.2,
+      material: materials.ball,
+      shape: new CANNON.Sphere(0.55),
+      position: new CANNON.Vec3(ballStart.x, ballStart.y, ballStart.z),
+      linearDamping: 0.22,
+      angularDamping: 0.22,
+      allowSleep: true,
+      sleepSpeedLimit: 0.4,
+      sleepTimeLimit: 1,
+    })
+    world.addBody(ballBody)
+    dynamics.push({ mesh: ballMesh, body: ballBody })
+
+    addFlag({ x: cx - goalW / 2 - 3, z: goalZ + 2, title: 'GOAL', color: C.teal })
+    addLabel('KICK-ABOUT', new THREE.Vector3(cx, 7, cz + 2), { height: 0.9, bg: 'rgba(63,201,191,0.95)' })
+    obstacles.push({ x: cx, z: cz, r: 22 })
+
+    football = {
+      body: ballBody,
+      mesh: ballMesh,
+      start: ballStart,
+      goal: { x: cx, z: goalZ, halfW: goalW / 2 - 0.6, depth: 3.2, height: 3.6 },
+      scored: 0,
+    }
+  }
+
+  // --- Nitro -------------------------------------------------------------
+  /** Canisters, weighted along the run into the stunt park. */
+  function buildNitro() {
+    const spots = [
+      [26, -26], [38, -38], [50, -50],
+      [62, -64], [40, -14],
+      [-20, 30], [30, 40],
+    ]
+    spots.forEach(([x, z]) => {
+      const mesh = P.nitroCanister()
+      mesh.position.set(x, 1.4, z)
+      root.add(mesh)
+
+      const halo = P.meshOf(
+        new THREE.RingGeometry(1.2, 1.7, 24),
+        new THREE.MeshBasicMaterial({ color: 0x64e0ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide }),
+        { cast: false, receive: false }
+      )
+      halo.rotation.x = -Math.PI / 2
+      halo.position.set(x, 0.1, z)
+      root.add(halo)
+
+      nitros.push({ mesh, halo, position: new THREE.Vector3(x, 1.4, z), collected: false, respawn: 0 })
+    })
   }
 
   // --- Scenery -----------------------------------------------------------
@@ -968,6 +1130,14 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       if (poi.followOffset) poi.position.add(poi.followOffset)
     }
 
+    for (const n of nitros) {
+      if (n.collected) continue
+      n.mesh.rotation.y = elapsed * 2.2
+      n.mesh.rotation.z = 0.4 + Math.sin(elapsed * 1.6) * 0.15
+      n.mesh.position.y = 1.4 + Math.sin(elapsed * 2.4 + n.position.x) * 0.22
+      n.halo.scale.setScalar(1 + Math.sin(elapsed * 3 + n.position.z) * 0.14)
+    }
+
     for (const s of shards) {
       if (s.collected) continue
       s.mesh.rotation.y = elapsed * 1.6
@@ -993,8 +1163,19 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   }
 
   return {
-    root, pois, shards, dynamics, breakables, ground,
+    root, pois, shards, dynamics, breakables, ground, specials, nitros,
     update, syncDynamics,
+    get football() {
+      return football
+    },
+    resetBall() {
+      if (!football) return
+      const b = football.body
+      b.position.set(football.start.x, football.start.y, football.start.z)
+      b.velocity.setZero()
+      b.angularVelocity.setZero()
+      b.wakeUp()
+    },
   }
 }
 
