@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { C } from './palette.js'
 
 // Geometry/material caches — every prop type is instantiated many times, so
@@ -31,134 +30,7 @@ export function meshOf(geometry, material, { cast = true, receive = true } = {})
 
 // --- Scenery -------------------------------------------------------------
 
-export function tree(rng = Math.random) {
-  const g = new THREE.Group()
-  const h = 2.2 + rng() * 1.8
-  const trunk = meshOf(
-    geo('trunk', () => new THREE.CylinderGeometry(0.17, 0.24, 1, 7)),
-    std(0x8a6a4a)
-  )
-  trunk.scale.y = h * 0.45
-  trunk.position.y = (h * 0.45) / 2
-  g.add(trunk)
-
-  const leafGeo = geo('leaf', () => new THREE.IcosahedronGeometry(1, 0))
-  const shades = [0x5f9e52, 0x6fae5e, 0x54904a]
-  for (let i = 0; i < 3; i++) {
-    const blob = meshOf(leafGeo, std(shades[i % shades.length], { flatShading: true }))
-    const s = (1.15 - i * 0.22) * (0.85 + rng() * 0.3)
-    blob.scale.setScalar(s)
-    blob.position.set((rng() - 0.5) * 0.5, h * 0.45 + 0.5 + i * 0.62, (rng() - 0.5) * 0.5)
-    blob.rotation.y = rng() * Math.PI
-    g.add(blob)
-  }
-  return g
-}
-
-export function bush(rng = Math.random) {
-  const g = new THREE.Group()
-  const leafGeo = geo('leaf', () => new THREE.IcosahedronGeometry(1, 0))
-  for (let i = 0; i < 3; i++) {
-    const b = meshOf(leafGeo, std(i % 2 ? 0x6fae5e : 0x5f9e52, { flatShading: true }))
-    const s = 0.4 + rng() * 0.45
-    b.scale.setScalar(s)
-    b.position.set((rng() - 0.5) * 1.1, s * 0.7, (rng() - 0.5) * 1.1)
-    g.add(b)
-  }
-  return g
-}
-
-export function rock(rng = Math.random) {
-  const r = meshOf(
-    geo('rock', () => new THREE.DodecahedronGeometry(1, 0)),
-    std(0x9aa3ad, { flatShading: true })
-  )
-  const s = 0.5 + rng() * 0.9
-  r.scale.set(s, s * (0.6 + rng() * 0.4), s * (0.8 + rng() * 0.4))
-  r.position.y = s * 0.35
-  r.rotation.set(rng(), rng() * Math.PI, rng())
-  return r
-}
-
-export function lamp() {
-  const g = new THREE.Group()
-  const pole = meshOf(
-    geo('lampPole', () => new THREE.CylinderGeometry(0.09, 0.13, 4.4, 8)),
-    std(C.navy, { roughness: 0.5 })
-  )
-  pole.position.y = 2.2
-  g.add(pole)
-
-  const arm = meshOf(geo('lampArm', () => new THREE.BoxGeometry(0.9, 0.12, 0.12)), std(C.navy))
-  arm.position.set(0.42, 4.3, 0)
-  g.add(arm)
-
-  const head = meshOf(
-    geo('lampHead', () => new THREE.SphereGeometry(0.26, 12, 10)),
-    std(0xfff3cf, { emissive: 0xffe9a8, emissiveIntensity: 0.9, roughness: 0.3 })
-  )
-  head.position.set(0.84, 4.22, 0)
-  head.castShadow = false
-  g.add(head)
-  return g
-}
-
-export function flag(color = C.coral) {
-  const g = new THREE.Group()
-  const pole = meshOf(
-    geo('flagPole', () => new THREE.CylinderGeometry(0.06, 0.06, 5, 6)),
-    std(0xd8dee8, { metalness: 0.5, roughness: 0.3 })
-  )
-  pole.position.y = 2.5
-  g.add(pole)
-  const cloth = meshOf(geo('flagCloth', () => new THREE.PlaneGeometry(1.4, 0.85)), std(color, { side: THREE.DoubleSide }))
-  cloth.position.set(0.7, 4.3, 0)
-  g.add(cloth)
-  g.userData.cloth = cloth
-  return g
-}
-
 // --- Signage -------------------------------------------------------------
-
-/**
- * A framed billboard on two posts. `texture` is drawn on the front face and a
- * flat back panel closes it off so the sign reads from behind too.
- */
-export function billboard({ texture, width = 8, height = 4, postHeight = 2.4, frame = C.navy }) {
-  const g = new THREE.Group()
-
-  const panelGeo = new RoundedBoxGeometry(width, height, 0.26, 3, 0.1)
-  // Signage is backlit. At this hour skylight alone leaves the panels too dim to
-  // read, and a lit sign is what a real forecourt board would be at 5am anyway.
-  const faceMat = new THREE.MeshStandardMaterial({
-    map: texture,
-    emissive: 0xffffff,
-    emissiveMap: texture,
-    emissiveIntensity: 0.5,
-    roughness: 0.78,
-    metalness: 0,
-  })
-  const sideMat = std(frame, { roughness: 0.6 })
-  // BoxGeometry material order: +x, -x, +y, -y, +z, -z
-  const panel = new THREE.Mesh(panelGeo, [sideMat, sideMat, sideMat, sideMat, faceMat, sideMat])
-  panel.castShadow = true
-  panel.receiveShadow = true
-  panel.position.y = postHeight + height / 2
-  g.add(panel)
-
-  const border = meshOf(new RoundedBoxGeometry(width + 0.34, height + 0.34, 0.16, 3, 0.07), sideMat)
-  border.position.set(0, postHeight + height / 2, -0.08)
-  g.add(border)
-
-  const postGeo = geo('signPost', () => new THREE.CylinderGeometry(0.16, 0.19, 1, 8))
-  for (const x of [-width * 0.3, width * 0.3]) {
-    const p = meshOf(postGeo, sideMat)
-    p.scale.y = postHeight + 0.3
-    p.position.set(x, (postHeight + 0.3) / 2, -0.1)
-    g.add(p)
-  }
-  return g
-}
 
 /** Floating caption plane that always faces the camera. */
 export function floatingLabel(texture, height = 1.1) {
@@ -329,72 +201,69 @@ export function cylinderBody({ world, radius, height, position, mass = 0, materi
 }
 
 /**
- * Collapse a group of never-moving meshes into one mesh per material. Trees,
- * bushes, rocks and lamps are several hundred tiny objects; merged, they cost a
- * handful of draw calls instead, which is the difference between smooth and
- * stuttering on a mid-range phone.
+ * A labelled shipping container. This is what carries the CV now: the long
+ * sides read from the road, the roof reads from the overhead camera, and the
+ * whole thing is a dynamic body, so it shunts and topples like anything else.
  *
- * Returns a new group; the caller should discard the original.
+ * BoxGeometry material order is [+x, -x, +y, -y, +z, -z]; length runs along X.
  */
-export function mergeStatic(group) {
-  group.updateMatrixWorld(true)
-
-  const byMaterial = new Map()
-  group.traverse((node) => {
-    if (!node.isMesh || node.isInstancedMesh) return
-    const key = node.material
-    const geometry = node.geometry.clone()
-    geometry.applyMatrix4(node.matrixWorld)
-    // Merging requires identical attribute sets; UV-less geometry would break
-    // the merge, so normalise by dropping anything the batch doesn't share.
-    for (const name of Object.keys(geometry.attributes)) {
-      if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name)
-    }
-    if (!geometry.attributes.uv) {
-      const count = geometry.attributes.position.count
-      geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(count * 2), 2))
-    }
-    const list = byMaterial.get(key) || []
-    list.push(geometry)
-    byMaterial.set(key, list)
+export function container({ side, top, end, length, height, width, accent }) {
+  const sideMat = new THREE.MeshStandardMaterial({
+    map: side, emissive: 0xffffff, emissiveMap: side, emissiveIntensity: 0.34, roughness: 0.7, metalness: 0.12,
   })
+  const topMat = new THREE.MeshStandardMaterial({
+    map: top, emissive: 0xffffff, emissiveMap: top, emissiveIntensity: 0.34, roughness: 0.7, metalness: 0.12,
+  })
+  const endMat = new THREE.MeshStandardMaterial({ map: end, roughness: 0.75, metalness: 0.12 })
+  const floorMat = std(0x1a2536, { roughness: 0.9 })
 
-  const merged = new THREE.Group()
-  for (const [material, geometries] of byMaterial) {
-    const geometry = mergeGeometries(geometries.map((g) => g.toNonIndexed()), false)
-    geometries.forEach((g) => g.dispose())
-    if (!geometry) continue
-    geometry.computeBoundingSphere()
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    merged.add(mesh)
+  const group = new THREE.Group()
+  group.add(meshOf(
+    new THREE.BoxGeometry(length, height, width),
+    [endMat, endMat, topMat, floorMat, sideMat, sideMat]
+  ))
+
+  // Corner castings, so it reads as a container rather than a printed box.
+  const post = new RoundedBoxGeometry(0.34, height + 0.06, 0.34, 2, 0.06)
+  const postMat = std(accent ?? 0x2b3a52, { roughness: 0.6, metalness: 0.2 })
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const p = meshOf(post, postMat)
+      p.position.set((sx * (length - 0.34)) / 2, 0, (sz * (width - 0.34)) / 2)
+      group.add(p)
+    }
   }
-  return merged
+  return group
 }
 
 /**
- * A texture laid flat on the ground, lifted just clear of it. Backlit like the
- * standing signage so it stays readable before sunrise.
+ * A banner on a pole. Knockable like everything else — its body is a slab
+ * covering the pole, so a clip at speed lays the whole thing flat.
  */
-export function groundPanel(texture, width, depth, { rotY = 0 } = {}) {
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(width, depth),
-    new THREE.MeshStandardMaterial({
-      map: texture,
-      emissive: 0xffffff,
-      emissiveMap: texture,
-      emissiveIntensity: 0.62,
-      transparent: true,
-      depthWrite: false,
-      roughness: 0.9,
-    })
-  )
-  mesh.rotation.x = -Math.PI / 2
-  mesh.rotation.z = -rotY
-  mesh.position.y = 0.06
-  mesh.receiveShadow = false
-  mesh.castShadow = false
-  mesh.renderOrder = 2
-  return mesh
+export function bannerFlag({ texture, poleHeight = 5.2, bannerW = 2.6, bannerH = 1.6 }) {
+  const group = new THREE.Group()
+  group.add(meshOf(
+    new THREE.CylinderGeometry(0.11, 0.13, poleHeight, 8),
+    std(0xc3cfe4, { roughness: 0.35, metalness: 0.55 })
+  ))
+
+  const mat = new THREE.MeshStandardMaterial({
+    map: texture,
+    emissive: 0xffffff,
+    emissiveMap: texture,
+    emissiveIntensity: 0.45,
+    roughness: 0.85,
+    side: THREE.DoubleSide,
+  })
+  const cloth = new THREE.Mesh(new THREE.PlaneGeometry(bannerW, bannerH), mat)
+  cloth.castShadow = true
+  cloth.position.set(bannerW / 2 + 0.1, poleHeight / 2 - bannerH / 2 - 0.25, 0)
+  group.add(cloth)
+
+  const cap = meshOf(new THREE.SphereGeometry(0.16, 10, 8), std(0xe2ebfa, { metalness: 0.5, roughness: 0.3 }))
+  cap.position.y = poleHeight / 2
+  group.add(cap)
+
+  group.userData.cloth = cloth
+  return group
 }

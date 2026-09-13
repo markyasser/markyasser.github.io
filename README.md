@@ -13,19 +13,19 @@ marking is drawn into a canvas at runtime, so the entire site is one JS bundle.
 
 | Direction | Zone | Contents |
 |---|---|---|
-| Centre | Start plaza | Name, summary, headline numbers |
-| North | Experience avenue | Prepit, Cairo University, Gameball |
-| East | Skills yard | Crates you can smash, one per technology |
-| West | Cairo University | Degree and honours |
-| South | Contact portals | GitHub, LinkedIn, email, phone |
+| Centre | Start plaza | The name container, and a banner per direction |
+| North | Experience avenue | Prepit, Cairo University, Gameball — one container each, plus their stacks, then the impact cubes |
+| East | Skills yard | A container per skill group, fronted by crates you can smash |
+| West | Cairo University | Degree, honours, and a graduation cap you can knock off the roof |
+| South | Contact | GitHub, LinkedIn and email containers |
 | North-east | Stunt park | Ramps, barrels, bowling pins |
 
 Ten glowing shards are hidden around the map; each one reveals a fact about the
 work.
 
-Everything in the world is solid. Trees, rocks, street lamps, barrels and every
-skill crate can be shoved, knocked over and — hit hard enough — smashed into
-pieces.
+Everything in the world is solid and everything moves. Containers shunt and
+topple, banners fold flat, and trees, rocks, lamps, barrels and crates smash
+into pieces when hit hard enough.
 
 ## Controls
 
@@ -55,17 +55,29 @@ Signage is backlit for the same reason. Skylight alone leaves a panel too dim to
 read at this hour, and a lit forecourt board is what you would actually see at
 5am anyway.
 
-## Reading the CV from above
+## Everything is an object
 
-The camera looks down, so anything mounted vertically on a building is seen
-almost edge-on. The ground is the one surface the player always has square on,
-so that is where the CV actually lives: each skill group, company, the degree
-and the contact links all have a lit panel lying flat beside them
-(`addGroundPanel` in `world.js`). The standing signs are atmosphere, and for the
-lower camera modes.
+There are no buildings, no gateway arches and no signs painted on the ground.
+Every piece of the CV is carried by a physical object the car can hit: the
+titles are stencilled on shipping containers, the zones are marked by banners on
+poles, the headline numbers are cubes, and the skills are crates you can smash.
 
-A side effect worth keeping: smashing every crate in the skills yard does not
-destroy the information, because the list is painted on the ground next to it.
+Containers are lettered on their long sides so they read from the road, and
+across the roof so they read from the overhead camera — that second face matters,
+because a fixed high camera sees anything vertical almost edge-on.
+
+The only immovable things in the world are the boundary and the stunt ramps. The
+ramps stay fixed because they are terrain you drive *on*; a ramp that slid away
+when you hit it would be unusable. Everything else — every container, banner,
+crate, barrel, cone, tree, rock and street lamp — has mass and reacts.
+
+Two consequences worth knowing:
+
+- A landmark's reading spot travels with it. Shunt the Prepit container across
+  the map and its info panel still opens beside it, because the point of
+  interest is attached to the body rather than to a fixed coordinate.
+- Smashing a skill group's crates does not lose the information: the full list
+  is also printed across its container's roof.
 
 ## The camera
 
@@ -78,11 +90,11 @@ than a corridor, and it is the model Bruno Simon's portfolio uses.
 
 Two consequences fall out of that choice, both handled in code:
 
-- The player cannot swing the view around an obstacle, so any structure that
-  ends up between the camera and the car fades out instead (`registerOccluder`
-  in `world.js`). Arches, buildings and the name sign all do this.
 - The framing leads along the car's velocity rather than its heading, so you
   see where you are going without the view ever rotating.
+- Nothing in the world stands tall enough to block the view for long, which is
+  part of why the buildings went: with a camera the player cannot swing around
+  an obstacle, a five-storey block on the near side of the road is a wall.
 
 Press **C** for an overhead view, or a conventional chase camera if you prefer
 it. Scroll or pinch to zoom; the setting is remembered.

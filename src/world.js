@@ -5,8 +5,8 @@ import { C, CSS, hex } from './palette.js'
 import * as P from './props.js'
 import { Breakables } from './breakables.js'
 import {
-  signTexture, heroTexture, crateTexture, statTexture,
-  labelTexture, groundTexture, groundPanelTexture, skyTexture,
+  crateTexture, statTexture, labelTexture, groundTexture, skyTexture,
+  containerSideTexture, containerTopTexture, containerEndTexture, bannerTexture,
 } from './textures.js'
 import { PROFILE, EXPERIENCE, EDUCATION, SKILL_GROUPS, STATS, CONTACT_LINKS, SHARD_FACTS } from './data.js'
 
@@ -18,26 +18,6 @@ const ROAD_W = 11
 const LABEL_FADE_NEAR = 6
 const LABEL_FADE_FAR = 13
 
-// How far a structure fades when it blocks the view.
-const OCCLUDED_OPACITY = 0.18
-
-let windowGeometry = null
-function WINDOW_GEO() {
-  if (!windowGeometry) windowGeometry = new THREE.BoxGeometry(1.5, 1.15, 0.18)
-  return windowGeometry
-}
-
-// A fresh material per building: the occlusion fade clones and dims it, and a
-// shared one would dim every building at once.
-function windowMaterial() {
-  return new THREE.MeshStandardMaterial({
-    color: 0xffca7d,
-    emissive: 0xffb85e,
-    emissiveIntensity: 2.6,
-    roughness: 0.25,
-    metalness: 0.3,
-  })
-}
 
 // Deterministic RNG so the scenery is identical on every load — the layout is
 // part of the design, not something that should shuffle between visits.
@@ -70,9 +50,6 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   const animated = []
   // Footprints that scenery must not spawn inside.
   const obstacles = []
-  // Solid structures that should fade when they come between camera and car.
-  const occluders = new Map()
-  const occluderEntries = []
   const root = new THREE.Group()
   scene.add(root)
 
@@ -164,7 +141,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   const streetZ = [-26, -46, -66]
   EXPERIENCE.forEach((job, i) => {
     const side = i % 2 === 0 ? -1 : 1
-    buildCompany(job, { x: side * 19, z: streetZ[i], facing: side === -1 ? 1 : -1 })
+    buildCompany(job, { x: side * 12, z: streetZ[i], facing: side === -1 ? 1 : -1 })
   })
   buildStatsPlaza()
 
@@ -203,100 +180,6 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     return pts
   }
 
-  function staticBox(mesh, size, position, rotationY = 0) {
-    const q = new CANNON.Quaternion().setFromEuler(0, rotationY, 0)
-    return P.boxBody({ world, size, position, mass: 0, material: materials.ground, quaternion: q })
-  }
-
-  /**
-   * Mark a structure as something to fade out when it stands between the camera
-   * and the car. With a fixed-angle camera the player cannot swing the view
-   * around an obstacle, so anything solid has to get out of the way itself.
-   *
-   * Materials are cloned per structure: they are shared by default, and fading
-   * a shared material would dim every building in the world at once. A
-   * structure with several bodies (an arch has two legs and a beam) shares one
-   * entry, so whichever the camera ray strikes fades the whole thing.
-   */
-  function registerOccluder(bodies, group) {
-    const entry = { meshes: [], bodies: new Set(), fade: 1, applied: 1 }
-    group.traverse((node) => {
-      if (!node.isMesh) return
-      node.material = Array.isArray(node.material)
-        ? node.material.map((m) => m.clone())
-        : node.material.clone()
-      entry.meshes.push(node)
-    })
-    if (!entry.meshes.length) return
-    for (const body of [].concat(bodies)) {
-      entry.bodies.add(body)
-      occluders.set(body, entry)
-    }
-    occluderEntries.push(entry)
-  }
-
-  /**
-   * `hitBody` is whatever the camera ray struck this frame, or null. Everything
-   * it did not strike eases back to fully opaque.
-   */
-  function updateOcclusion(hitBody, dt) {
-    for (const entry of occluderEntries) {
-      const target = entry.bodies.has(hitBody) ? OCCLUDED_OPACITY : 1
-      entry.fade = THREE.MathUtils.damp(entry.fade, target, 9, dt)
-      if (Math.abs(entry.fade - target) < 0.01) entry.fade = target
-      if (Math.abs(entry.fade - entry.applied) < 0.004) continue
-      entry.applied = entry.fade
-
-      for (const mesh of entry.meshes) {
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-        for (const m of mats) {
-          m.opacity = entry.fade
-          // Staying in the opaque pass while solid avoids sorting artefacts.
-          m.transparent = entry.fade < 0.995
-          m.depthWrite = entry.fade > 0.6
-        }
-      }
-    }
-  }
-
-  /**
-   * Lay a readable panel on the ground. The fixed camera looks down, so this is
-   * where the CV actually gets read; the standing signs are for atmosphere and
-   * for the lower camera modes.
-   */
-  function addGroundPanel(x, z, width, depth, opts) {
-    const tex = groundPanelTexture(renderer, {
-      ...opts,
-      width: 1024,
-      height: Math.round((1024 * depth) / width),
-    })
-    const panel = P.groundPanel(tex, width, depth)
-    panel.position.set(x, 0.06, z)
-    root.add(panel)
-    return panel
-  }
-
-  /** A painted disc on the ground marking where a landmark opens. */
-  function addMarker(x, z, color, radius = 5) {
-    const disc = P.meshOf(
-      new THREE.CircleGeometry(radius, 32),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false }),
-      { cast: false, receive: false }
-    )
-    disc.rotation.x = -Math.PI / 2
-    disc.position.set(x, 0.07, z)
-    root.add(disc)
-
-    const ring = P.meshOf(
-      new THREE.RingGeometry(radius - 0.45, radius, 32),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false }),
-      { cast: false, receive: false }
-    )
-    ring.rotation.x = -Math.PI / 2
-    ring.position.set(x, 0.09, z)
-    root.add(ring)
-  }
-
   function addLabel(text, position, { height = 1.5, color = CSS.cream, bg = 'rgba(34,48,74,0.9)' } = {}) {
     const sprite = P.floatingLabel(labelTexture(renderer, { text, color, bg }), height)
     sprite.position.copy(position)
@@ -305,32 +188,93 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     return sprite
   }
 
+  // --- Shared builders ---------------------------------------------------
+
+  /**
+   * A labelled shipping container: a dynamic body like everything else, so the
+   * player can shunt the CV around the map if they want to. Containers carry
+   * the titles now — there are no buildings and no gateway arches left, and
+   * nothing in the world is immovable except the boundary.
+   */
+  function addContainer({
+    x, z, rotY = 0, length = 9, height = 3, width = 3,
+    mass = 180, title, sub = '', meta = '', items = [], color, accent,
+  }) {
+    const hexColor = hex(color)
+    const group = P.container({
+      side: containerSideTexture(renderer, { title, sub, meta, color: hexColor }),
+      top: containerTopTexture(renderer, { title, items, color: hexColor }),
+      end: containerEndTexture(renderer, { color: hexColor }),
+      length, height, width, accent,
+    })
+    group.position.set(x, height / 2, z)
+    group.rotation.y = rotY
+    root.add(group)
+
+    const body = P.boxBody({
+      world,
+      size: { x: length, y: height, z: width },
+      position: { x, y: height / 2, z },
+      mass,
+      material: materials.prop,
+      quaternion: new CANNON.Quaternion().setFromEuler(0, rotY, 0),
+    })
+    body.angularDamping = 0.45
+    body.linearDamping = 0.04
+    dynamics.push({ mesh: group, body })
+    obstacles.push({ x, z, r: Math.max(length, width) * 0.8 })
+    return { mesh: group, body }
+  }
+
+  /** A banner on a pole. Marks a zone, and folds flat when you clip it. */
+  function addFlag({ x, z, rotY = 0, title, color, height = 5.2 }) {
+    const group = P.bannerFlag({
+      texture: bannerTexture(renderer, { title, color: hex(color) }),
+      poleHeight: height,
+    })
+    group.position.set(x, height / 2, z)
+    group.rotation.y = rotY
+    root.add(group)
+
+    const body = P.boxBody({
+      world,
+      size: { x: 1.7, y: height, z: 0.6 },
+      position: { x, y: height / 2, z },
+      mass: 16,
+      material: materials.prop,
+      quaternion: new CANNON.Quaternion().setFromEuler(0, rotY, 0),
+    })
+    body.angularDamping = 0.4
+    dynamics.push({ mesh: group, body })
+    animated.push(group)
+    return { mesh: group, body }
+  }
+
   // --- Hub ---------------------------------------------------------------
   function buildHub() {
-    const hero = P.billboard({
-      texture: heroTexture(renderer, { name: PROFILE.short, title: PROFILE.title, tagline: PROFILE.tagline }),
-      width: 17,
-      height: 8.5,
-      postHeight: 3,
+    // The name sits on the biggest container in the world, square across the
+    // approach road so it is the first thing the player drives at.
+    const name = addContainer({
+      x: 0, z: -13, length: 15, height: 3.6, width: 3.4, mass: 260,
+      title: PROFILE.short,
+      sub: PROFILE.title,
+      meta: PROFILE.tagline,
+      items: [PROFILE.location],
+      color: C.navyLight,
+      accent: C.coral,
     })
-    hero.position.set(0, 0, -11)
-    root.add(hero)
-    registerOccluder(staticBox(hero, { x: 17, y: 8.5, z: 1 }, { x: 0, y: 7.25, z: -11 }), hero)
 
-    // Plaza kerb, broken into four arcs so the roads pass through cleanly.
-    for (let i = 0; i < 4; i++) {
-      const arc = new THREE.Mesh(
-        new THREE.TorusGeometry(16, 0.32, 8, 28, THREE.MathUtils.degToRad(50)),
-        P.std(C.cream, { roughness: 0.8 })
-      )
-      arc.rotation.x = Math.PI / 2
-      arc.rotation.z = -THREE.MathUtils.degToRad(i * 90 + 20)
-      arc.position.y = 0.18
-      arc.receiveShadow = true
-      root.add(arc)
-    }
+    addPOI({
+      id: 'about',
+      kind: 'about',
+      position: new THREE.Vector3(0, 1, -6),
+      follow: name.body,
+      followOffset: new THREE.Vector3(0, 0, 7),
+      radius: 13,
+      title: 'About Mark',
+    })
 
-    // Direction posts pointing at each zone.
+    // Four banners at the plaza edge, one per direction.
     const dirs = [
       { label: 'EXPERIENCE', angle: Math.PI, color: C.coral },
       { label: 'SKILLS', angle: Math.PI / 2, color: C.teal },
@@ -338,279 +282,97 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       { label: 'CONTACT', angle: 0, color: C.amber },
     ]
     for (const d of dirs) {
-      // angle 0 => +Z (south/contact), PI => -Z (north/experience).
-      // Each post is pushed sideways so it never blocks the road it points down.
       const dirX = Math.sin(d.angle)
       const dirZ = Math.cos(d.angle)
-      const x = dirX * 15 + dirZ * 10.5
-      const z = dirZ * 15 - dirX * 10.5
-      const post = new THREE.Group()
-      const pole = P.meshOf(new THREE.CylinderGeometry(0.16, 0.2, 5.2, 8), P.std(C.navy))
-      pole.position.y = 2.6
-      post.add(pole)
-
-      const arrowTex = labelTexture(renderer, { text: `${d.label}  ▸`, bg: `rgba(${hexToRgb(d.color)},0.95)`, size: 110 })
-      const arrow = P.floatingLabel(arrowTex, 0.85)
-      arrow.position.set(x, 5.0, z)
-      root.add(arrow)
-      billboarded.push(arrow)
-
-      post.position.set(x, 0, z)
-      root.add(post)
-      P.cylinderBody({ world, radius: 0.3, height: 5.2, position: { x, y: 2.6, z }, mass: 0, material: materials.ground })
+      addFlag({
+        x: dirX * 15 + dirZ * 10.5,
+        z: dirZ * 15 - dirX * 10.5,
+        rotY: d.angle + Math.PI / 2,
+        title: d.label,
+        color: d.color,
+      })
     }
-
-    addGroundPanel(0, 12, 22, 9, {
-      title: PROFILE.short,
-      note: `${PROFILE.title}  ·  ${PROFILE.location}`,
-      items: STATS.map((st) => `${st.value}  ${st.label}`),
-      accent: hex(C.coral),
-      columns: 2,
-    })
-
-    addMarker(0, -4, C.coral, 6)
-    addPOI({
-      id: 'about',
-      kind: 'about',
-      position: new THREE.Vector3(0, 1, -4),
-      radius: 13,
-      title: 'About Mark',
-    })
-
-    // Welcome arch over the spawn road.
-    buildArch({ x: 0, z: 27, width: 15, height: 8, color: C.navy, label: 'PORTFOLIO', accent: C.coral })
-  }
-
-  /**
-   * A gateway arch. Placement is passed in rather than applied by the caller,
-   * because the leg colliders have to be built in final world space — creating
-   * them before the group is positioned strands them at the origin.
-   */
-  function buildArch({ x = 0, z = 0, rotY = 0, width, height, color, label, accent }) {
-    const g = new THREE.Group()
-    g.position.set(x, 0, z)
-    g.rotation.y = rotY
-    root.add(g)
-
-    const legGeo = new RoundedBoxGeometry(1.5, height, 1.5, 3, 0.2)
-    const cos = Math.cos(rotY)
-    const sin = Math.sin(rotY)
-    const legBodies = []
-    for (const lx of [-width / 2, width / 2]) {
-      const leg = P.meshOf(legGeo, P.std(color))
-      leg.position.set(lx, height / 2, 0)
-      g.add(leg)
-      legBodies.push(P.boxBody({
-        world,
-        size: { x: 1.6, y: height, z: 1.6 },
-        position: { x: x + lx * cos, y: height / 2, z: z - lx * sin },
-        mass: 0,
-        material: materials.ground,
-        quaternion: new CANNON.Quaternion().setFromEuler(0, rotY, 0),
-      }))
-      obstacles.push({ x: x + lx * cos, z: z - lx * sin, r: 5 })
-    }
-
-    // The beam across the road blocks the view long before a leg does, so it
-    // needs a body of its own for the camera ray to find. It sits well above
-    // the road, so it only ever matters to a car that is already airborne.
-    const beamBody = P.boxBody({
-      world,
-      size: { x: width + 2.4, y: 2.4, z: 1.8 },
-      position: { x, y: height + 0.6, z },
-      mass: 0,
-      material: materials.ground,
-      quaternion: new CANNON.Quaternion().setFromEuler(0, rotY, 0),
-    })
-
-    const beam = P.meshOf(new RoundedBoxGeometry(width + 2.4, 1.9, 1.6, 3, 0.2), P.std(color))
-    beam.position.y = height + 0.6
-    g.add(beam)
-    const stripe = P.meshOf(new THREE.BoxGeometry(width + 2.4, 0.3, 1.7), P.std(accent))
-    stripe.position.y = height - 0.44
-    g.add(stripe)
-
-    if (label) {
-      const tex = labelTexture(renderer, { text: label, bg: null, color: CSS.cream, size: 150 })
-      const plate = P.floatingLabel(tex, 1.5)
-      plate.position.set(0, height + 0.6, 0.85)
-      g.add(plate)
-      const back = plate.clone()
-      back.position.z = -0.85
-      back.rotation.y = Math.PI
-      g.add(back)
-    }
-
-    // Registered last: the registry snapshots the group's meshes, so every part
-    // of the arch has to exist before this runs.
-    registerOccluder([...legBodies, beamBody], g)
-    return g
   }
 
   // --- Experience --------------------------------------------------------
   function buildCompany(job, { x, z, facing }) {
-    const g = new THREE.Group()
-    g.position.set(x, 0, z)
-    // facing: +1 means the front faces +X, -1 means it faces -X.
-    g.rotation.y = facing === 1 ? Math.PI / 2 : -Math.PI / 2
-    root.add(g)
-
-    const w = 12.5
-    const d = 9.5
-    const h = job.floors * 2.7
-
-    const tower = P.meshOf(new RoundedBoxGeometry(w, h, d, 3, 0.22), P.std(C.wall, { roughness: 0.85 }))
-    tower.position.y = h / 2
-    g.add(tower)
-
-    const roof = P.meshOf(new RoundedBoxGeometry(w + 0.9, 0.7, d + 0.9, 3, 0.18), P.std(job.accent))
-    roof.position.y = h + 0.3
-    g.add(roof)
-
-    const plinth = P.meshOf(new RoundedBoxGeometry(w + 2.2, 0.55, d + 2.2, 3, 0.15), P.std(C.sand, { roughness: 0.95 }))
-    plinth.position.y = 0.27
-    g.add(plinth)
-
-    // Windows as one instanced mesh per building. Instancing keeps the draw
-    // calls down; keeping it inside the building's own group means the
-    // occlusion fade takes the windows with it instead of leaving them hanging
-    // in mid-air when the wall goes transparent.
-    const winSlots = []
-    for (let f = 0; f < job.floors; f++) {
-      for (let c = 0; c < 4; c++) {
-        if (f === 0 && (c === 1 || c === 2)) continue // leave room for the door
-        for (const zz of [d / 2 + 0.02, -d / 2 - 0.02]) {
-          winSlots.push(new THREE.Vector3(-w / 2 + 2.2 + c * 2.7, 1.9 + f * 2.7, zz))
-        }
-      }
-    }
-    const windows = new THREE.InstancedMesh(WINDOW_GEO(), windowMaterial(), winSlots.length)
-    windows.castShadow = false
-    windows.receiveShadow = true
-    const wm = new THREE.Matrix4()
-    winSlots.forEach((local, i) => {
-      wm.makeTranslation(local.x, local.y, local.z)
-      windows.setMatrixAt(i, wm)
+    // Long axis along the road, so the lettered side faces oncoming traffic.
+    const rotY = Math.PI / 2
+    const main = addContainer({
+      x, z, rotY, length: 11, height: 3.2, width: 3.2, mass: 150,
+      title: job.company,
+      sub: job.role,
+      meta: job.period,
+      items: job.tags.slice(0, 4),
+      color: job.accent,
+      accent: C.navy,
     })
-    windows.instanceMatrix.needsUpdate = true
-    g.add(windows)
 
-    // Entrance.
-    const door = P.meshOf(new RoundedBoxGeometry(3.4, 3.0, 0.3, 3, 0.1), P.std(C.navy))
-    door.position.set(0, 1.5, d / 2 + 0.05)
-    g.add(door)
-    const canopy = P.meshOf(new RoundedBoxGeometry(5.2, 0.35, 2.2, 3, 0.12), P.std(job.accent))
-    canopy.position.set(0, 3.3, d / 2 + 1.0)
-    g.add(canopy)
-
-    // Company sign on the roof, plus a road-facing billboard.
-    const roofSign = P.billboard({
-      texture: signTexture(renderer, {
-        title: job.company,
-        subtitle: job.role,
-        meta: job.period,
-        accent: hex(job.accent),
-        width: 1024,
-        height: 420,
-      }),
-      width: 10.5,
-      height: 4.3,
-      postHeight: 0.5,
-      frame: job.accent,
+    // A second, smaller can behind it carrying the stack.
+    addContainer({
+      x: x - facing * 5.5, z: z + 1.5, rotY: Math.PI / 2, length: 7, height: 2.4, width: 2.6, mass: 80,
+      title: 'Stack',
+      items: job.tags,
+      color: C.navyLight,
+      accent: job.accent,
     })
-    roofSign.position.set(0, h + 0.6, 0)
-    g.add(roofSign)
 
-    const flagpole = P.flag(job.accent)
-    flagpole.position.set(w / 2 + 2.4, 0, d / 2 + 1.2)
-    g.add(flagpole)
-    animated.push(flagpole)
-
-    const lampA = P.lamp()
-    lampA.position.set(-w / 2 - 2.4, 0, d / 2 + 3)
-    lampA.rotation.y = Math.PI
-    g.add(lampA)
-
-    registerOccluder(
-      staticBox(tower, { x: w + 2, y: h, z: d + 2 }, { x, y: h / 2, z }, g.rotation.y),
-      g
-    )
-    obstacles.push({ x, z, r: 16 })
+    addFlag({ x: x + facing * 5, z: z - 8, rotY: facing === 1 ? 0 : Math.PI, title: job.company, color: job.accent })
 
     addPOI({
       id: job.id,
       kind: 'job',
       data: job,
-      position: new THREE.Vector3(x + facing * 10.5, 1, z),
+      position: new THREE.Vector3(x + facing * 8, 1, z),
+      follow: main.body,
+      followOffset: new THREE.Vector3(facing * 8, 0, 0),
       radius: 11,
       title: job.company,
     })
 
-    addGroundPanel(x + facing * 19, z, 17, 8, {
-      title: job.company,
-      note: `${job.role}  ·  ${job.period}`,
-      items: job.tags,
-      accent: hex(job.accent),
-      columns: 2,
-    })
-
-    addMarker(x + facing * 10.5, z, job.accent)
-    // High above the roof, so it reads from across the map without looming over
-    // the spot where the player actually parks.
-    addLabel(job.company.toUpperCase(), new THREE.Vector3(x, h + 8, z), {
+    addLabel(job.company.toUpperCase(), new THREE.Vector3(x, 8, z), {
       height: 1.1,
       bg: `rgba(${hexToRgb(job.accent)},0.95)`,
     })
   }
 
   function buildStatsPlaza() {
-    buildArch({ x: 0, z: -74, width: 16, height: 7.5, color: C.coral, label: 'IMPACT', accent: C.cream })
-
-    // Two markers a side, lining the final stretch of the experience avenue.
+    // Each headline number is its own cube. They are meant to be knocked about.
     const slots = [
-      [-11, -80], [11, -80], [-11, -90], [11, -90],
+      [-11, -78], [11, -78], [-11, -89], [11, -89],
     ]
-    STATS.forEach((s, i) => {
+    const accents = [CSS.coral, CSS.teal, CSS.amber, '#8f83f7']
+    STATS.forEach((stat, i) => {
       const [x, z] = slots[i]
-      const g = new THREE.Group()
-      g.position.set(x, 0, z)
-      g.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2
-      root.add(g)
-      obstacles.push({ x, z, r: 7 })
+      const size = 3.4
+      const tex = statTexture(renderer, { ...stat, accent: accents[i % accents.length] })
+      const mat = new THREE.MeshStandardMaterial({
+        map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4, roughness: 0.8,
+      })
+      const mesh = P.meshOf(new RoundedBoxGeometry(size, size, size, 3, 0.12), mat)
+      mesh.position.set(x, size / 2, z)
+      root.add(mesh)
 
-      const post = P.meshOf(new RoundedBoxGeometry(0.8, 3.2, 0.8, 3, 0.15), P.std(C.navy))
-      post.position.y = 1.6
-      g.add(post)
-
-      const accent = [CSS.coral, CSS.teal, CSS.amber, '#7a6cf0'][i % 4]
-      const panel = P.meshOf(
-        new RoundedBoxGeometry(5, 5, 0.4, 3, 0.16),
-        [P.std(C.navy), P.std(C.navy), P.std(C.navy), P.std(C.navy),
-          (() => {
-            const tex = statTexture(renderer, { ...s, accent })
-            return new THREE.MeshStandardMaterial({
-              map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5, roughness: 0.8,
-            })
-          })(),
-          P.std(C.navy)]
-      )
-      panel.position.y = 5.4
-      g.add(panel)
-
-      P.boxBody({ world, size: { x: 1.2, y: 3.2, z: 1.2 }, position: { x, y: 1.6, z }, mass: 0, material: materials.ground })
+      const body = P.boxBody({
+        world, size: { x: size, y: size, z: size }, position: { x, y: size / 2, z },
+        mass: 45, material: materials.prop,
+      })
+      body.angularDamping = 0.4
+      dynamics.push({ mesh, body })
+      obstacles.push({ x, z, r: 6 })
     })
+
+    addFlag({ x: 0, z: -70, title: 'IMPACT', color: C.coral })
   }
 
   // --- Skills ------------------------------------------------------------
   function buildSkillYard() {
     const { x: cx, z: cz } = ZONES.skills
-    buildArch({
-      x: cx - 27, z: 0, rotY: Math.PI / 2,
-      width: 15, height: 8, color: C.teal, label: 'SKILLS YARD', accent: C.cream,
-    })
+    addFlag({ x: cx - 28, z: -6, rotY: Math.PI / 2, title: 'SKILLS YARD', color: C.teal })
+    addFlag({ x: cx - 28, z: 6, rotY: Math.PI / 2, title: 'SKILLS YARD', color: C.teal })
 
     const cols = 3
-    const spacing = 15.5
+    const spacing = 16.5
     SKILL_GROUPS.forEach((group, i) => {
       const gx = cx + ((i % cols) - 1) * spacing
       const gz = cz + (Math.floor(i / cols) - 1) * spacing
@@ -621,29 +383,20 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       id: 'skills',
       kind: 'skills',
       position: new THREE.Vector3(cx, 1, cz),
-      radius: 24,
+      radius: 26,
       title: 'Technical Skills',
     })
   }
 
   function buildSkillStack(group, gx, gz) {
-    // Small plinth + group label, then a pyramid of crates to knock over.
-    obstacles.push({ x: gx, z: gz, r: 9 })
-    const plinth = P.meshOf(new THREE.CylinderGeometry(4.9, 5.3, 0.4, 24), P.std(C.sand, { roughness: 0.95 }))
-    plinth.position.set(gx, 0.2, gz)
-    plinth.receiveShadow = true
-    root.add(plinth)
-
-    const ring = P.meshOf(new THREE.TorusGeometry(4.9, 0.16, 6, 32), P.std(group.color))
-    ring.rotation.x = Math.PI / 2
-    ring.position.set(gx, 0.42, gz)
-    root.add(ring)
-
-    addGroundPanel(gx, gz + 8, 13, 5.6, {
+    // The group's own container: name on the sides, full list across the roof
+    // so it still reads once the crates in front of it are gone.
+    addContainer({
+      x: gx, z: gz + 7.5, length: 9, height: 2.5, width: 2.6, mass: 90,
       title: group.label,
       items: group.items,
-      accent: hex(group.color),
-      columns: group.items.length > 4 ? 2 : 1,
+      color: group.color,
+      accent: C.navy,
     })
 
     addLabel(group.label.toUpperCase(), new THREE.Vector3(gx, 6.6, gz), {
@@ -665,7 +418,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       row.forEach((item, c) => {
         const ox = (c - (row.length - 1) / 2) * pitch
         const mesh = P.crate({ texture: crateTexture(renderer, { label: item, color: hex(group.color) }), size })
-        const pos = { x: gx + ox, y: 0.45 + size / 2 + r * (size + 0.04), z: gz }
+        const pos = { x: gx + ox, y: 0.1 + size / 2 + r * (size + 0.04), z: gz }
         mesh.position.set(pos.x, pos.y, pos.z)
         mesh.rotation.y = (c * 0.09 - 0.1) * (r + 1)
         root.add(mesh)
@@ -689,166 +442,92 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   // --- Education ---------------------------------------------------------
   function buildCampus() {
     const { x: cx, z: cz } = ZONES.education
-    const g = new THREE.Group()
-    g.position.set(cx, 0, cz)
-    g.rotation.y = Math.PI / 2 // front faces +X, back toward the hub road
-    root.add(g)
 
-    // Stepped base.
-    for (let i = 0; i < 3; i++) {
-      const step = P.meshOf(
-        new THREE.BoxGeometry(26 - i * 2.2, 0.45, 18 - i * 2.2),
-        P.std(i % 2 ? C.cream : C.sand, { roughness: 0.95 })
-      )
-      step.position.y = 0.22 + i * 0.45
-      g.add(step)
-    }
+    const main = addContainer({
+      x: cx, z: cz, rotY: 0, length: 13, height: 3.4, width: 3.2, mass: 170,
+      title: EDUCATION.school,
+      sub: EDUCATION.degree,
+      meta: EDUCATION.period,
+      items: [EDUCATION.grade],
+      color: C.violet,
+      accent: C.navy,
+    })
 
-    const hall = P.meshOf(new RoundedBoxGeometry(19, 7.5, 12, 3, 0.25), P.std(C.wall, { roughness: 0.9 }))
-    hall.position.y = 1.35 + 3.75
-    g.add(hall)
+    addContainer({
+      x: cx + 2, z: cz - 8, rotY: 0, length: 9, height: 2.4, width: 2.6, mass: 80,
+      title: 'Honours',
+      items: [EDUCATION.grade, 'Teaching Assistant 2025'],
+      color: C.navyLight,
+      accent: C.violet,
+    })
 
-    // Colonnade.
-    const colGeo = new THREE.CylinderGeometry(0.62, 0.68, 7.2, 14)
-    for (let i = 0; i < 6; i++) {
-      const col = P.meshOf(colGeo, P.std(C.white, { roughness: 0.85 }))
-      col.position.set(-9 + i * 3.6, 1.35 + 3.6, 6.6)
-      g.add(col)
-    }
-    const entablature = P.meshOf(new THREE.BoxGeometry(20, 1.1, 3.4), P.std(C.cream))
-    entablature.position.set(0, 1.35 + 7.75, 6.0)
-    g.add(entablature)
-
-    // Classical pediment: a real triangular prism sitting on the entablature.
-    const tri = new THREE.Shape()
-    tri.moveTo(-10, 0)
-    tri.lineTo(10, 0)
-    tri.lineTo(0, 3.2)
-    tri.lineTo(-10, 0)
-    const pedGeo = new THREE.ExtrudeGeometry(tri, { depth: 3.2, bevelEnabled: false })
-    pedGeo.translate(0, 0, -1.6)
-    const pediment = P.meshOf(pedGeo, P.std(C.violet, { roughness: 0.85 }))
-    pediment.position.set(0, 1.35 + 8.3, 6.0)
-    g.add(pediment)
-
-    // Oversized graduation cap crowning the hall.
+    // The graduation cap survived the campus: it sits on the container roof and
+    // is its own body, so a solid hit sends it flying.
     const cap = new THREE.Group()
-    const head = P.meshOf(new THREE.CylinderGeometry(1.5, 1.7, 1.3, 16), P.std(C.navy))
-    cap.add(head)
-    const board = P.meshOf(new THREE.BoxGeometry(5.6, 0.34, 5.6), P.std(C.navy))
-    board.position.y = 0.85
+    cap.add(P.meshOf(new THREE.CylinderGeometry(1.2, 1.4, 1.1, 16), P.std(C.navy)))
+    const board = P.meshOf(new THREE.BoxGeometry(4.4, 0.3, 4.4), P.std(C.navy))
+    board.position.y = 0.7
     board.rotation.y = Math.PI / 4
     cap.add(board)
-    const button = P.meshOf(new THREE.SphereGeometry(0.26, 10, 8), P.std(C.amber))
-    button.position.y = 1.1
+    const button = P.meshOf(new THREE.SphereGeometry(0.22, 10, 8), P.std(C.amber))
+    button.position.y = 0.92
     cap.add(button)
-    const tassel = P.meshOf(new THREE.CylinderGeometry(0.08, 0.08, 2.4, 6), P.std(C.amber))
-    tassel.position.set(1.9, 0.1, 1.9)
-    cap.add(tassel)
-    cap.position.set(0, 1.35 + 7.5 + 1.1, -1)
-    g.add(cap)
-
-    const sign = P.billboard({
-      texture: signTexture(renderer, {
-        title: EDUCATION.school,
-        subtitle: `${EDUCATION.degree} — ${EDUCATION.grade}`,
-        meta: EDUCATION.period,
-        accent: '#7a6cf0',
-        width: 1024,
-        height: 440,
-      }),
-      width: 13,
-      height: 5.6,
-      postHeight: 2.6,
-      frame: C.violet,
+    cap.position.set(cx - 3, 4.6, cz)
+    root.add(cap)
+    const capBody = P.boxBody({
+      world, size: { x: 4.2, y: 1.6, z: 4.2 }, position: { x: cx - 3, y: 4.6, z: cz },
+      mass: 45, material: materials.prop,
     })
-    sign.position.set(0, 0, 14)
-    g.add(sign)
+    dynamics.push({ mesh: cap, body: capBody })
 
-    registerOccluder(staticBox(hall, { x: 26, y: 9, z: 18 }, { x: cx, y: 4.5, z: cz }, g.rotation.y), g)
-    obstacles.push({ x: cx, z: cz, r: 26 })
+    addFlag({ x: cx + 10, z: cz + 7, title: 'EDUCATION', color: C.violet })
 
     addPOI({
       id: 'education',
       kind: 'education',
-      position: new THREE.Vector3(cx + 14, 1, cz),
+      position: new THREE.Vector3(cx + 11, 1, cz),
+      follow: main.body,
+      followOffset: new THREE.Vector3(11, 0, 0),
       radius: 13,
       title: EDUCATION.school,
     })
-    addGroundPanel(cx + 26, cz, 17, 7.5, {
-      title: EDUCATION.school,
-      note: `${EDUCATION.degree}  ·  ${EDUCATION.period}`,
-      items: [EDUCATION.grade, 'Teaching Assistant, 2025'],
-      accent: hex(C.violet),
-      columns: 1,
-    })
-
-    addMarker(cx + 14, cz, C.violet)
-    addLabel('EDUCATION', new THREE.Vector3(cx, 18, cz), { height: 1.1, bg: 'rgba(122,108,240,0.95)' })
+    addLabel('EDUCATION', new THREE.Vector3(cx, 10, cz), { height: 1.1, bg: 'rgba(143,131,247,0.95)' })
   }
 
   // --- Contact -----------------------------------------------------------
   function buildContactPlaza() {
     const { x: cx, z: cz } = ZONES.contact
-    buildArch({ x: 0, z: cz - 26, width: 16, height: 8.5, color: C.amber, label: 'GET IN TOUCH', accent: C.navy })
 
     CONTACT_LINKS.forEach((link, i) => {
       const x = cx + (i - 1) * 17
-      const z = cz
-      const g = new THREE.Group()
-      g.position.set(x, 0, z)
-      g.rotation.y = Math.PI
-      root.add(g)
-
-      // A ring portal you drive up to.
-      const ring = P.meshOf(new THREE.TorusGeometry(4.4, 0.55, 12, 40), P.std(link.color, { roughness: 0.5, metalness: 0.2 }))
-      ring.position.y = 5.2
-      g.add(ring)
-
-      const pillar = P.meshOf(new RoundedBoxGeometry(2.4, 1.6, 2.4, 3, 0.2), P.std(C.navy))
-      pillar.position.y = 0.8
-      g.add(pillar)
-
-      const inner = P.meshOf(
-        new THREE.CircleGeometry(3.9, 32),
-        new THREE.MeshBasicMaterial({ color: link.color, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false })
-      )
-      inner.position.y = 5.2
-      g.add(inner)
-
-      const tex = labelTexture(renderer, { text: link.label.toUpperCase(), bg: `rgba(${hexToRgb(link.color)},0.95)`, size: 120 })
-      const plate = P.floatingLabel(tex, 1.35)
-      plate.userData.billboarded = false
-      plate.position.set(0, 10.8, 0)
-      g.add(plate)
-
-      P.boxBody({ world, size: { x: 2.6, y: 1.6, z: 2.6 }, position: { x, y: 0.8, z }, mass: 0, material: materials.ground })
-      obstacles.push({ x, z, r: 10 })
-
-      addGroundPanel(x, z - 10, 14, 5, {
+      const color = link.color === C.navy ? C.blue : link.color
+      const main = addContainer({
+        x, z: cz - 4, rotY: 0, length: 10, height: 3, width: 3, mass: 130,
         title: link.label,
+        sub: link.sub,
         items: [link.sub],
-        accent: hex(link.color === C.navy ? C.blue : link.color),
-        columns: 1,
+        color,
+        accent: C.navy,
       })
+      addFlag({ x: x + 6.5, z: cz - 10, title: link.label, color })
 
-      addMarker(x, z - 4, link.color, 4.5)
       addPOI({
         id: link.id,
         kind: 'contact',
         data: link,
-        position: new THREE.Vector3(x, 1, z - 4),
+        position: new THREE.Vector3(x, 1, cz - 10),
+        follow: main.body,
+        followOffset: new THREE.Vector3(0, 0, -6),
         radius: 9,
         title: link.label,
       })
-      animated.push(ring)
     })
 
     addPOI({
       id: 'contact',
       kind: 'contactHub',
       position: new THREE.Vector3(cx, 1, cz - 16),
-      radius: 11,
+      radius: 10,
       title: 'Contact',
     })
   }
@@ -935,10 +614,8 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       title: 'Stunt Park',
     })
 
-    buildArch({
-      x: cx - 25, z: cz + 25, rotY: -Math.PI / 4,
-      width: 13, height: 7, color: C.violet, label: 'STUNT PARK', accent: C.amber,
-    })
+    addFlag({ x: cx - 24, z: cz + 20, rotY: -Math.PI / 4, title: 'STUNT PARK', color: C.violet })
+    addFlag({ x: cx - 20, z: cz + 24, rotY: -Math.PI / 4, title: 'STUNT PARK', color: C.violet })
   }
 
   function addCone(x, z) {
@@ -1212,15 +889,18 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       sprite.material.opacity = opacity
       sprite.visible = opacity > 0.02
     }
-    for (const obj of animated) {
-      const cloth = obj.userData.cloth
-      if (cloth) {
-        cloth.rotation.y = Math.sin(elapsed * 2.4) * 0.25
-        cloth.scale.x = 1 + Math.sin(elapsed * 3.1) * 0.06
-      } else {
-        obj.rotation.z = elapsed * 0.6
-      }
+    for (const flag of animated) {
+      const cloth = flag.userData.cloth
+      if (!cloth) continue
+      cloth.rotation.y = Math.sin(elapsed * 2.4 + flag.position.x) * 0.22
+      cloth.scale.x = 1 + Math.sin(elapsed * 3.1 + flag.position.z) * 0.05
     }
+    for (const poi of pois) {
+      if (!poi.follow) continue
+      poi.position.set(poi.follow.position.x, poi.follow.position.y, poi.follow.position.z)
+      if (poi.followOffset) poi.position.add(poi.followOffset)
+    }
+
     for (const s of shards) {
       if (s.collected) continue
       s.mesh.rotation.y = elapsed * 1.6
@@ -1245,14 +925,9 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     }
   }
 
-  /** True when this body belongs to a structure that fades rather than blocks. */
-  function canFade(body) {
-    return occluders.has(body)
-  }
-
   return {
     root, pois, shards, dynamics, breakables, ground,
-    update, syncDynamics, updateOcclusion, canFade,
+    update, syncDynamics,
   }
 }
 

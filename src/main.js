@@ -436,8 +436,7 @@ class App {
     }
 
     const pivot = this._pivot.copy(carPos).setY(carPos.y + 1.5)
-    const blocker = this._avoidClipping(pivot, desired)
-    this.worldRefs.updateOcclusion(blocker, dt)
+    this._avoidClipping(pivot, desired)
 
     this.camera.position.lerp(desired, 1 - Math.exp(-mode.damp * dt))
 
@@ -460,17 +459,15 @@ class App {
   }
 
   /**
-   * Resolve anything standing between the camera and the car. Structures that
-   * can fade do so and the camera holds its framing; anything else (a hedge, a
-   * ramp) pulls the camera in instead. `desired` is adjusted in place.
-   *
-   * Only static geometry is tested, so driving past a barrel doesn't yank the
-   * view. Returns the body that was struck, or null.
+   * Pull the camera in if terrain stands between it and the car. Only static
+   * geometry is tested — the boundary, the stunt ramps — so the loose props
+   * that now make up the whole world never yank the view. `desired` is
+   * adjusted in place.
    */
   _avoidClipping(pivot, desired) {
     const dir = this._camDir.copy(desired).sub(pivot)
     const dist = dir.length()
-    if (dist < 0.05) return null
+    if (dist < 0.05) return
     dir.divideScalar(dist)
 
     this._rayFrom.set(pivot.x, pivot.y, pivot.z)
@@ -484,19 +481,14 @@ class App {
       collisionFilterMask: STATIC_GROUP,
       skipBackfaces: false,
     })
-    if (!this._rayHit.hasHit) return null
-
-    const body = this._rayHit.body
-    if (this.worldRefs.canFade(body)) return body
-
+    if (!this._rayHit.hasHit) return
     const hit = this._rayHit.hitPointWorld
     const hitDist = Math.hypot(hit.x - pivot.x, hit.y - pivot.y, hit.z - pivot.z)
     const safe = Math.max(4.6, hitDist - 0.8)
-    if (safe >= dist) return body
+    if (safe >= dist) return
     desired.copy(pivot).addScaledVector(dir, safe)
     // Close in, look down over the car rather than sitting at bumper height.
     desired.y = Math.max(desired.y, pivot.y + 2.4)
-    return body
   }
 
   _followSun() {
