@@ -36,9 +36,9 @@ const SPAWN_HEADING = Math.PI
  * where you are going without the view ever turning.
  */
 const CAMERA_MODES = [
-  { name: 'follow', fixed: true, offset: new THREE.Vector3(0, 17, 20), lead: 0.55, damp: 4.2 },
-  { name: 'overhead', fixed: true, offset: new THREE.Vector3(0, 34, 7), lead: 0.45, damp: 5 },
-  { name: 'chase', offset: new THREE.Vector3(0, 7.6, -14), lookAhead: 8, damp: 3.6 },
+  { name: 'follow', fixed: true, offset: new THREE.Vector3(0, 20.5, 24), lead: 0.55, damp: 4.2 },
+  { name: 'overhead', fixed: true, offset: new THREE.Vector3(0, 41, 8.5), lead: 0.45, damp: 5 },
+  { name: 'chase', offset: new THREE.Vector3(0, 9.1, -16.8), lookAhead: 8, damp: 3.6 },
 ]
 
 // How far ahead of the car the fixed camera is allowed to look, in metres.
@@ -82,7 +82,6 @@ class App {
     this._setupPhysics()
 
     this.ui = new UI({
-      onStart: () => this.start(),
       onToggleSound: () => this.audio.toggle(),
       onReset: () => this.resetCar(),
       onCamera: () => this.cycleCamera(),
@@ -247,16 +246,15 @@ class App {
     await step(1, 'Ready')
     this.ui.readyToStart()
     this._loop()
+    // Straight into the game: the loading screen is a progress bar, not a gate.
+    this.start()
   }
 
   // -------------------------------------------------------------- flow
   start() {
     this.ui.hideLoading()
     this.running = true
-    // Sound only if it was asked for. The Start click is the gesture browsers
-    // require before audio may play, so this is the moment to honour the choice
-    // made on the loading screen — but never to make it for the player.
-    if (this.ui.wantsSound()) this.ui.setSound(this.audio.enable())
+    this._armSound()
     this.clock.getDelta()
     this.ui.toast(
       this.ui.isTouch
@@ -272,6 +270,26 @@ class App {
         )
       }
     }, 7000)
+  }
+
+  /**
+   * Sound is on by default, but a browser will not let a page make noise until
+   * the visitor has interacted with it. Nothing is clicked to start any more, so
+   * arm the audio on the first gesture of any kind — a key, a click, a touch.
+   */
+  _armSound() {
+    if (!this.ui.wantsSound()) return
+    const events = ['pointerdown', 'keydown', 'touchstart']
+    const arm = () => {
+      for (const e of events) window.removeEventListener(e, arm)
+      if (this.ui.wantsSound()) this.ui.setSound(this.audio.enable())
+    }
+    for (const e of events) window.addEventListener(e, arm, { passive: true })
+    // Some browsers allow it outright; if so, there is no reason to wait.
+    if (this.audio.enable()) {
+      this.ui.setSound(true)
+      if (this.audio.ctx.state === 'running') arm()
+    }
   }
 
   cycleCamera() {
@@ -440,14 +458,8 @@ class App {
       this._guardBounds()
 
       this.ui.setSpeed(this.car.speed * 3.6)
-      this.ui.setGear(this.car.gearLabel, this.car.rev)
-      this.audio.update(
-        this.car.speed,
-        this.controls.state.throttle,
-        this.car.rev,
-        this.car.shiftCut > 0
-      )
-      if (this.car.shifted) this.audio.shift(this.car.shifted > 0)
+      this.ui.setRev(this.car.rev)
+      this.audio.update(this.car.speed, this.controls.state.throttle, this.car.rev)
       // Tyres protest when the car is sliding rather than rolling.
       if (this.car.slip > 0.35 && this.car.speed > 7) {
         this.audio.screech(this.car.slip * (this.car.speed / 14))

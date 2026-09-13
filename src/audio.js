@@ -63,7 +63,10 @@ export class Audio {
     this.noise.start()
   }
 
-  /** Switch sound on. Safe to call only from inside a user gesture. */
+  /**
+   * Switch sound on. Outside a user gesture the context may stay suspended;
+   * calling this again from a gesture then resumes it.
+   */
   enable() {
     this._init()
     if (!this.ctx) return false
@@ -82,11 +85,8 @@ export class Audio {
     return this.enabled
   }
 
-  /**
-   * The engine note follows the revs, not road speed — that is what makes a
-   * gearbox audible: the pitch climbs through a gear and drops on the shift.
-   */
-  update(speed, throttle, rev = null, shifting = false) {
+  /** The engine note climbs with the revs, which track road speed. */
+  update(speed, throttle, rev = null) {
     if (!this.enabled || !this.ctx) return
     const t = this.ctx.currentTime
     const effort = Math.abs(throttle)
@@ -99,34 +99,13 @@ export class Audio {
     this.osc2.frequency.setTargetAtTime(base * 1.51, t, 0.05)
     this.filter.frequency.setTargetAtTime(300 + revs * 2300 + effort * 420, t, 0.07)
 
-    // Near-silent when parked, and backed right off mid-shift so the pause in
-    // the drive is heard as well as felt.
+    // Near-silent when parked.
     const idle = 0.012
-    const load = shifting ? 0.25 : 1
-    this.engineGain.gain.setTargetAtTime((idle + revs * 0.115 + effort * 0.055) * load, t, 0.05)
+    this.engineGain.gain.setTargetAtTime(idle + revs * 0.115 + effort * 0.055, t, 0.05)
 
     const road = Math.min(1, speed / 30)
     this.noiseGain.gain.setTargetAtTime(road * 0.04, t, 0.15)
     this.noiseFilter.frequency.setTargetAtTime(500 + road * 1800, t, 0.15)
-  }
-
-  /** The clunk of a gear going home. Up is a sharper knock than down. */
-  shift(up = true) {
-    if (!this.enabled || !this.ctx) return
-    const t = this.ctx.currentTime
-    this._noise(t, {
-      duration: up ? 0.075 : 0.1,
-      from: up ? 2400 : 1500,
-      to: 420,
-      q: 1.8,
-      gain: 0.13,
-    })
-    this._tone(t, {
-      freq: up ? 210 : 150,
-      endFreq: up ? 96 : 78,
-      duration: 0.11,
-      gain: 0.12,
-    })
   }
 
   // --- impact voices -------------------------------------------------------

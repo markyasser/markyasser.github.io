@@ -35,8 +35,7 @@ const ICONS = {
 }
 
 export class UI {
-  constructor({ onStart, onToggleSound, onReset, onCamera }) {
-    this.onStart = onStart
+  constructor({ onToggleSound, onReset, onCamera }) {
     this.root = document.getElementById('app')
     this._toastTimers = new Set()
 
@@ -45,16 +44,13 @@ export class UI {
     this.loading = document.getElementById('loading')
     this.loadFill = document.getElementById('load-fill')
     this.loadStatus = document.getElementById('load-status')
-    this.startBtn = document.getElementById('start-btn')
     this.panel = document.getElementById('panel')
     this.panelHead = document.getElementById('panel-head')
     this.panelBody = document.getElementById('panel-body')
     this.prompt = document.getElementById('prompt')
     this.promptText = document.getElementById('prompt-text')
     this.gauge = document.getElementById('gauge-value')
-    this.gearEl = document.getElementById('gear-value')
     this.revEl = document.getElementById('rev-fill')
-    this._gear = null
     this._rev = -1
     this.shardEl = document.getElementById('shard-value')
     this.nitroEl = document.getElementById('nitro-value')
@@ -63,13 +59,10 @@ export class UI {
     this.resume = document.getElementById('resume')
     this.touch = document.getElementById('touch')
 
-    // Sound is opt-in and remembered. Starting a page making noise unannounced
-    // is startling, so the choice is made here, before anything plays.
-    this.soundCheck = document.getElementById('sound-check')
-    this.soundCheck.checked = readStored('sound') === '1'
-    this.soundCheck.addEventListener('change', () => {
-      writeStored('sound', this.soundCheck.checked ? '1' : '0')
-    })
+    // Sound is on unless the player has turned it off before. The browser
+    // still holds it back until the first click or key press; the game arms it
+    // on that gesture.
+    this.soundOn = readStored('sound') !== '0'
 
     const coarseHint = window.matchMedia('(pointer: coarse)').matches
     document.getElementById('load-hint').innerHTML = coarseHint
@@ -82,7 +75,6 @@ export class UI {
          Everything you can see can be knocked over.<br>
          Prefer plain text? Hit <b>CV</b> in the top bar.`
 
-    this.startBtn.addEventListener('click', () => this.onStart())
     document.getElementById('panel-close').addEventListener('click', () => this.closePanel())
     document.getElementById('btn-resume').addEventListener('click', () => this.toggleResume(true))
     document.getElementById('resume-close').addEventListener('click', () => this.toggleResume(false))
@@ -93,8 +85,8 @@ export class UI {
     this.soundBtn = document.getElementById('btn-sound')
     this.soundBtn.addEventListener('click', () => {
       const on = onToggleSound()
+      this.soundOn = on
       this.setSound(on)
-      this.soundCheck.checked = on
       writeStored('sound', on ? '1' : '0')
     })
 
@@ -126,11 +118,6 @@ export class UI {
     <div class="load-role">${esc(r.title)}</div>
     <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
     <div class="load-status" id="load-status">Building the world…</div>
-    <button class="start-btn" id="start-btn">Start driving</button>
-    <label class="sound-opt" id="sound-opt">
-      <input type="checkbox" id="sound-check">
-      <span>Play sound</span>
-    </label>
     <div class="load-hint" id="load-hint"></div>
   </div>
 </div>
@@ -151,7 +138,7 @@ export class UI {
 
   <div class="gauge">
     <b id="gauge-value">0</b><span>km/h</span>
-    <div class="gear"><i id="gear-value">N</i><u><em id="rev-fill"></em></u></div>
+    <div class="rev"><u><em id="rev-fill"></em></u></div>
   </div>
   <div class="shard-count"><i>◆</i><span id="shard-value">0 / 10</span></div>
   <div class="nitro-count" id="nitro-count"><i>⚡</i><span id="nitro-value">0</span><b>NITRO</b></div>
@@ -225,9 +212,9 @@ export class UI {
     </article>`
   }
 
-  /** Did the player ask for sound on the loading screen? */
+  /** Does the player want sound? On unless they have turned it off before. */
   wantsSound() {
-    return this.soundCheck.checked
+    return this.soundOn
   }
 
   setSound(on) {
@@ -244,8 +231,6 @@ export class UI {
 
   readyToStart() {
     this.loadStatus.textContent = 'Ready'
-    this.startBtn.classList.add('ready')
-    document.getElementById('sound-opt').classList.add('ready')
   }
 
   hideLoading() {
@@ -257,11 +242,7 @@ export class UI {
     this.gauge.textContent = Math.round(kmh)
   }
 
-  setGear(label, rev) {
-    if (label !== this._gear) {
-      this._gear = label
-      this.gearEl.textContent = label
-    }
+  setRev(rev) {
     // Only touch the DOM when the needle has actually moved a visible amount.
     const pct = Math.round(rev * 100)
     if (pct !== this._rev) {
@@ -485,7 +466,6 @@ export class UI {
         <ul>
           <li><b>W / ↑</b> accelerate · <b>S / ↓</b> brake and reverse</li>
           <li><b>A / ←</b> and <b>D / →</b> steer</li>
-          <li>Six gears, shifted for you. The readout by the speedo shows the gear and the revs</li>
           <li><b>Space</b> handbrake · <b>R</b> reset the car</li>
           <li><b>Shift</b> burns a nitro charge — collect the blue canisters, then hit the ramps</li>
           <li><b>C</b> cycles the camera: follow, overhead, and a chase view that sits behind the car</li>

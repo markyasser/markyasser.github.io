@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { C } from './palette.js'
 
 // Geometry/material caches — every prop type is instantiated many times, so
@@ -567,4 +568,94 @@ export function nitroCanister() {
     group.add(ring)
   }
   return group
+}
+
+// --- Solid lettering -----------------------------------------------------
+
+/**
+ * A 5x7 pixel font, drawn as blocks. A real extruded typeface would mean
+ * shipping a font file and a parser for it; this stays in keeping with
+ * everything else here — built from boxes, no assets — and the chunky
+ * silhouette reads from the air, which is where the camera usually is.
+ */
+const GLYPH_COLS = 5
+const GLYPH_ROWS = 7
+const GLYPHS = {
+  A: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
+  B: ['11110', '10001', '10001', '11110', '10001', '10001', '11110'],
+  C: ['01110', '10001', '10000', '10000', '10000', '10001', '01110'],
+  D: ['11110', '10001', '10001', '10001', '10001', '10001', '11110'],
+  E: ['11111', '10000', '10000', '11110', '10000', '10000', '11111'],
+  F: ['11111', '10000', '10000', '11110', '10000', '10000', '10000'],
+  G: ['01110', '10001', '10000', '10111', '10001', '10001', '01111'],
+  H: ['10001', '10001', '10001', '11111', '10001', '10001', '10001'],
+  I: ['11111', '00100', '00100', '00100', '00100', '00100', '11111'],
+  J: ['00111', '00010', '00010', '00010', '00010', '10010', '01100'],
+  K: ['10001', '10010', '10100', '11000', '10100', '10010', '10001'],
+  L: ['10000', '10000', '10000', '10000', '10000', '10000', '11111'],
+  M: ['10001', '11011', '10101', '10101', '10001', '10001', '10001'],
+  N: ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
+  O: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
+  P: ['11110', '10001', '10001', '11110', '10000', '10000', '10000'],
+  Q: ['01110', '10001', '10001', '10001', '10101', '10010', '01101'],
+  R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+  S: ['01111', '10000', '10000', '01110', '00001', '00001', '11110'],
+  T: ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
+  U: ['10001', '10001', '10001', '10001', '10001', '10001', '01110'],
+  V: ['10001', '10001', '10001', '10001', '10001', '01010', '00100'],
+  W: ['10001', '10001', '10001', '10101', '10101', '11011', '10001'],
+  X: ['10001', '10001', '01010', '00100', '01010', '10001', '10001'],
+  Y: ['10001', '10001', '01010', '00100', '00100', '00100', '00100'],
+  Z: ['11111', '00001', '00010', '00100', '01000', '10000', '11111'],
+  '.': ['00000', '00000', '00000', '00000', '00000', '01100', '01100'],
+  '-': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'],
+}
+
+/** Is there a block for this character? Spaces have width but no geometry. */
+export const hasGlyph = (char) => !!GLYPHS[char.toUpperCase()]
+
+/** Width of one glyph at a given cap height, in metres. */
+export const glyphWidth = (height) => (height / GLYPH_ROWS) * GLYPH_COLS
+
+/**
+ * One solid letter, centred on its own origin. Every run of lit pixels in a row
+ * becomes a single box and the lot is merged, so a letter is one draw call
+ * rather than thirty.
+ */
+export function letterBlock({ char, height = 2.4, depth = 0.8, color = C.cream, emissive = 0.1 }) {
+  const rows = GLYPHS[char.toUpperCase()]
+  if (!rows) return null
+
+  const cell = height / GLYPH_ROWS
+  // A hair of overlap between neighbouring blocks: butted exactly, rounding
+  // leaves hairline cracks you can see daylight through.
+  const bleed = cell * 0.02
+  const parts = []
+
+  rows.forEach((row, r) => {
+    let run = 0
+    for (let c = 0; c <= GLYPH_COLS; c++) {
+      if (row[c] === '1') {
+        run += 1
+        continue
+      }
+      if (run) {
+        const box = new THREE.BoxGeometry(run * cell + bleed, cell + bleed, depth)
+        box.translate(
+          (c - run / 2 - GLYPH_COLS / 2) * cell,
+          (GLYPH_ROWS / 2 - r - 0.5) * cell,
+          0
+        )
+        parts.push(box)
+        run = 0
+      }
+    }
+  })
+
+  const merged = mergeGeometries(parts)
+  for (const p of parts) p.dispose()
+  return meshOf(
+    merged,
+    std(color, { emissive: color, emissiveIntensity: emissive, roughness: 0.6, metalness: 0.06 })
+  )
 }

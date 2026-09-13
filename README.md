@@ -15,7 +15,7 @@ marking is drawn into a canvas at runtime, so the entire site is one JS bundle.
 
 | Direction | Zone | Contents |
 |---|---|---|
-| Centre | Start plaza | The name container, and a banner per direction |
+| Centre | Start plaza | The name in solid letters, and a banner per direction |
 | North | Experience avenue | Prepit, Cairo University, Gameball — one container each, plus their stacks, then the impact cubes |
 | East | Skills yard | A container per skill group, fronted by crates you can smash |
 | West | Cairo University | Degree, honours, and a graduation cap you can knock off the roof |
@@ -133,6 +133,19 @@ Copy on the props is deliberately thin. A container identifies itself and
 nothing more; the role, the dates, the bullet points and the full skill lists
 all live in the panel that opens on **E**.
 
+## The name
+
+The name is not printed on anything — it stands in the plaza as ten solid
+letters, one dynamic body each. There is no font file behind them: a 5x7 pixel
+font in `props.js` turns each character into blocks, every run of lit pixels in
+a row becomes one box, and the lot is merged so a letter costs a single draw
+call. The chunky silhouette is the point, since the default camera looks down
+on it from the air.
+
+They are the one sign in the world that cannot be destroyed. Heavy and
+well-damped, so a bump only rocks them and a real hit shoves one out of line —
+but nothing ever breaks them or takes them away.
+
 ## The camera
 
 The default camera deliberately does **not** sit behind the car. A chase camera
@@ -153,22 +166,14 @@ Two consequences fall out of that choice, both handled in code:
 Press **C** for an overhead view, or a conventional chase camera if you prefer
 it. Scroll or pinch to zoom; the setting is remembered.
 
-## The gearbox
+## Revs
 
-Six speed-banded gears rather than a torque-and-ratio model: the car's handling
-is arcade, and a real RPM model would fight the flat drive force everywhere
-else. Each gear's band overlaps its neighbours', which is what stops the box
-hunting at the crossover speeds.
-
-Shifting cuts the drive for about a sixth of a second. That pause is the whole
-point of modelling gears at all — it is the part you feel. The engine note
-follows the revs rather than road speed, so the pitch climbs through a gear and
-drops on the shift, and the gain ducks while the clutch is out.
-
-Top gear stops just past the car's normal ceiling rather than stretching to the
-nitro ceiling. Spread over the full boost range the revs sat near idle at
-maximum speed and the engine sounded asleep; now nitro pins it against the
-limiter.
+There is no gearbox. The car's handling is arcade and its drive force is flat,
+so speed-banded ratios only ever added a lurch: the drive cut on every shift and
+the engine note sawed up and down while the car itself did nothing different.
+The revs now come straight off road speed, measured against the unboosted
+ceiling so nitro pins the note against the limiter. The bar beside the speedo
+shows the same number the engine is singing.
 
 ## Sound
 
@@ -182,10 +187,11 @@ Props carry their voice on the physics body (`body.userData.sfx`), so the
 collision handler picks the right one without a lookup table. Anything untagged
 falls back to a generic thud.
 
-Sound is **opt-in**. There is a "Play sound" checkbox beside the Start button,
-unchecked by default and remembered between visits; until it is ticked the audio
-context is never even created. A page that starts making noise on its own is
-startling, and it is not a choice to make on someone's behalf.
+Sound is **on by default** and the speaker button in the top bar mutes it; the
+choice is remembered between visits. Browsers will not let a page make noise
+before the visitor has interacted with it, and nothing is clicked to start any
+more, so the audio is armed on the first gesture of any kind — a key, a click, a
+touch.
 
 One thing to watch in the engine voice: it is a low sawtooth through a lowpass,
 and at any real resonance (Q above ~1.5) a static idle tone starts to sound

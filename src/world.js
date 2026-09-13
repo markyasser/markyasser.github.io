@@ -265,25 +265,80 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     return { mesh: group, body }
   }
 
+  /**
+   * The name, stood up as solid letters rather than printed on the side of a
+   * box. Each letter is its own dynamic body: heavy enough that a normal bump
+   * only rocks it, light enough that a real hit shoves it out of line. None of
+   * them ever breaks — this is the one sign in the world that has to survive
+   * whatever the player does to it.
+   *
+   * `color` may be a function of the word index, which is how the given name
+   * and the surname end up different colours on one baseline.
+   */
+  function addNameLetters({ text, x, z, height = 2.3, depth = 0.85, color, mass = 150 }) {
+    const glyphW = P.glyphWidth(height)
+    const gap = glyphW * 0.22
+    const spaceW = glyphW * 0.55
+    const advance = (ch) => (ch === ' ' ? spaceW : glyphW)
+    const colorAt = typeof color === 'function' ? color : () => color
+
+    const chars = [...text.toUpperCase()]
+    const total =
+      chars.reduce((sum, ch) => sum + advance(ch), 0) + gap * Math.max(0, chars.length - 1)
+
+    let cursor = -total / 2
+    let word = 0
+    const letters = []
+    for (const ch of chars) {
+      const w = advance(ch)
+      const cx = x + cursor + w / 2
+      cursor += w + gap
+      if (ch === ' ') {
+        word += 1
+        continue
+      }
+
+      const mesh = P.letterBlock({ char: ch, height, depth, color: colorAt(word) })
+      mesh.position.set(cx, height / 2, z)
+      root.add(mesh)
+
+      const body = P.boxBody({
+        world,
+        size: { x: glyphW, y: height, z: depth },
+        position: { x: cx, y: height / 2, z },
+        mass,
+        sfx: 'metal',
+        material: materials.prop,
+      })
+      // Stiff on both counts: a knocked letter should stop where it was put
+      // rather than skate off across the plaza.
+      body.angularDamping = 0.7
+      body.linearDamping = 0.3
+      dynamics.push({ mesh, body })
+      letters.push({ mesh, body })
+    }
+
+    obstacles.push({ x, z, r: total / 2 + 1.5 })
+    return { letters, width: total }
+  }
+
   // --- Hub ---------------------------------------------------------------
   function buildHub() {
-    // The name sits on the biggest container in the world, flanking the plaza
-    // rather than crossing it: at 15m long and centred it walled off the
-    // northbound avenue completely, and the experience zone behind it.
-    const name = addContainer({
-      x: -14, z: -12, length: 15, height: 3.6, width: 3.4, mass: 260,
-      title: PROFILE.short,
-      meta: PROFILE.title,
-      color: C.navyLight,
-      accent: C.coral,
+    // The name stands in the north-west quadrant, flanking the plaza rather
+    // than crossing it: anything this long sitting centred walls off the
+    // northbound avenue completely, and the experience zone behind it. Given
+    // name in cream, surname in coral, on one baseline.
+    addNameLetters({
+      text: PROFILE.short,
+      x: -18,
+      z: -13,
+      color: (word) => (word === 0 ? C.cream : C.coral),
     })
 
     addPOI({
       id: 'about',
       kind: 'about',
-      position: new THREE.Vector3(-4, 1, -6),
-      follow: name.body,
-      followOffset: new THREE.Vector3(10, 0, 6),
+      position: new THREE.Vector3(-14, 1, -8),
       radius: 13,
       title: 'About Mark',
     })
