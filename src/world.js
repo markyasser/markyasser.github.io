@@ -3,15 +3,20 @@ import * as CANNON from 'cannon-es'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { C, CSS, hex } from './palette.js'
 import * as P from './props.js'
+import { Breakables } from './breakables.js'
 import {
   signTexture, heroTexture, crateTexture, statTexture,
   labelTexture, groundTexture, skyTexture,
 } from './textures.js'
 import { PROFILE, EXPERIENCE, EDUCATION, SKILL_GROUPS, STATS, CONTACT_LINKS, SHARD_FACTS } from './data.js'
 
-export const WORLD_SIZE = 256
-export const BOUNDS = 112
+export const WORLD_SIZE = 224
+export const BOUNDS = 94
 const ROAD_W = 11
+
+// Floating labels fade between these distances from the camera.
+const LABEL_FADE_NEAR = 6
+const LABEL_FADE_FAR = 13
 
 // Deterministic RNG so the scenery is identical on every load — the layout is
 // part of the design, not something that should shuffle between visits.
@@ -28,14 +33,14 @@ function mulberry32(seed) {
 // Zone anchors. Everything else is positioned relative to these.
 export const ZONES = {
   hub: { x: 0, z: 0, label: 'START' },
-  experience: { x: 0, z: -74, label: 'EXPERIENCE' },
-  skills: { x: 72, z: 0, label: 'SKILLS' },
-  education: { x: -78, z: 0, label: 'EDUCATION' },
-  contact: { x: 0, z: 82, label: 'CONTACT' },
-  stunt: { x: 58, z: -58, label: 'STUNT PARK' },
+  experience: { x: 0, z: -64, label: 'EXPERIENCE' },
+  skills: { x: 62, z: 0, label: 'SKILLS' },
+  education: { x: -68, z: 0, label: 'EDUCATION' },
+  contact: { x: 0, z: 70, label: 'CONTACT' },
+  stunt: { x: 52, z: -52, label: 'STUNT PARK' },
 }
 
-export function buildWorld({ scene, world, renderer, materials }) {
+export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   const rng = mulberry32(20250913)
   const pois = []
   const shards = []
@@ -48,6 +53,8 @@ export function buildWorld({ scene, world, renderer, materials }) {
   const windowSlots = []
   const root = new THREE.Group()
   scene.add(root)
+
+  const breakables = new Breakables({ scene: root, world, material: materials.prop, onBreak })
 
   const addPOI = (poi) => {
     pois.push({ radius: 11, ...poi })
@@ -82,18 +89,18 @@ export function buildWorld({ scene, world, renderer, materials }) {
 
   // ------------------------------------------------------------- ground
   const roads = [
-    { points: [[0, -104], [0, 66]], width: ROAD_W },
-    { points: [[-60, 0], [96, 0]], width: ROAD_W },
-    { points: circlePoints(0, 0, 58, 48), width: 8 },
-    { points: [[ZONES.stunt.x - 26, ZONES.stunt.z + 26], [ZONES.stunt.x + 16, ZONES.stunt.z - 16]], width: 9 },
-    { points: [[-40, 44], [-70, 64]], width: 7, centerLine: false },
+    { points: [[0, -90], [0, 58]], width: ROAD_W },
+    { points: [[-52, 0], [86, 0]], width: ROAD_W },
+    { points: circlePoints(0, 0, 50, 48), width: 8 },
+    { points: [[ZONES.stunt.x - 24, ZONES.stunt.z + 24], [ZONES.stunt.x + 16, ZONES.stunt.z - 16]], width: 9 },
+    { points: [[-36, 40], [-60, 56]], width: 7, centerLine: false },
   ]
   const pads = [
-    { x: 0, z: 0, r: 17, color: '#e6d7b2' },
-    { x: ZONES.experience.x, z: -97, r: 19, color: '#ead9b8' },
-    { x: ZONES.skills.x, z: ZONES.skills.z, r: 27, color: '#e2d3ae' },
-    { x: ZONES.education.x, z: ZONES.education.z, r: 22, color: '#ead9b8' },
-    { x: ZONES.contact.x, z: ZONES.contact.z, r: 22, color: '#e2d3ae' },
+    { x: 0, z: 0, r: 16, color: '#e6d7b2' },
+    { x: ZONES.experience.x, z: -86, r: 17, color: '#ead9b8' },
+    { x: ZONES.skills.x, z: ZONES.skills.z, r: 25, color: '#e2d3ae' },
+    { x: ZONES.education.x, z: ZONES.education.z, r: 20, color: '#ead9b8' },
+    { x: ZONES.contact.x, z: ZONES.contact.z, r: 20, color: '#e2d3ae' },
     { x: ZONES.stunt.x, z: ZONES.stunt.z, r: 24, color: '#dccfae' },
   ]
 
@@ -132,10 +139,10 @@ export function buildWorld({ scene, world, renderer, materials }) {
   buildHub()
 
   // ---------------------------------------------------------- experience
-  const streetZ = [-28, -50, -72]
+  const streetZ = [-26, -46, -66]
   EXPERIENCE.forEach((job, i) => {
     const side = i % 2 === 0 ? -1 : 1
-    buildCompany(job, { x: side * 22, z: streetZ[i], facing: side === -1 ? 1 : -1 })
+    buildCompany(job, { x: side * 19, z: streetZ[i], facing: side === -1 ? 1 : -1 })
   })
   buildStatsPlaza()
   buildWindows()
@@ -157,6 +164,14 @@ export function buildWorld({ scene, world, renderer, materials }) {
   buildShards()
 
   // =========================================================== builders ==
+
+  /** Local transform for an instanced part, relative to its body's centre. */
+  function mat4(x, y, z, scaleY, scale) {
+    const s = scale instanceof THREE.Vector3
+      ? scale
+      : new THREE.Vector3(scale ?? 1, scaleY ?? 1, scale ?? 1)
+    return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), s)
+  }
 
   function circlePoints(cx, cz, r, seg) {
     const pts = []
@@ -206,18 +221,18 @@ export function buildWorld({ scene, world, renderer, materials }) {
   function buildHub() {
     const hero = P.billboard({
       texture: heroTexture(renderer, { name: PROFILE.short, title: PROFILE.title, tagline: PROFILE.tagline }),
-      width: 20,
-      height: 10,
-      postHeight: 3.4,
+      width: 17,
+      height: 8.5,
+      postHeight: 3,
     })
-    hero.position.set(0, 0, -12)
+    hero.position.set(0, 0, -11)
     root.add(hero)
-    staticBox(hero, { x: 20, y: 10, z: 1 }, { x: 0, y: 8.4, z: -12 })
+    staticBox(hero, { x: 17, y: 8.5, z: 1 }, { x: 0, y: 7.25, z: -11 })
 
     // Plaza kerb, broken into four arcs so the roads pass through cleanly.
     for (let i = 0; i < 4; i++) {
       const arc = new THREE.Mesh(
-        new THREE.TorusGeometry(17, 0.32, 8, 28, THREE.MathUtils.degToRad(50)),
+        new THREE.TorusGeometry(16, 0.32, 8, 28, THREE.MathUtils.degToRad(50)),
         P.std(C.cream, { roughness: 0.8 })
       )
       arc.rotation.x = Math.PI / 2
@@ -239,8 +254,8 @@ export function buildWorld({ scene, world, renderer, materials }) {
       // Each post is pushed sideways so it never blocks the road it points down.
       const dirX = Math.sin(d.angle)
       const dirZ = Math.cos(d.angle)
-      const x = dirX * 16 + dirZ * 11
-      const z = dirZ * 16 - dirX * 11
+      const x = dirX * 15 + dirZ * 10.5
+      const z = dirZ * 15 - dirX * 10.5
       const post = new THREE.Group()
       const pole = P.meshOf(new THREE.CylinderGeometry(0.16, 0.2, 5.2, 8), P.std(C.navy))
       pole.position.y = 2.6
@@ -267,7 +282,7 @@ export function buildWorld({ scene, world, renderer, materials }) {
     })
 
     // Welcome arch over the spawn road.
-    buildArch({ x: 0, z: 30, width: 16, height: 9, color: C.navy, label: 'PORTFOLIO', accent: C.coral })
+    buildArch({ x: 0, z: 27, width: 15, height: 8, color: C.navy, label: 'PORTFOLIO', accent: C.coral })
   }
 
   /**
@@ -350,9 +365,9 @@ export function buildWorld({ scene, world, renderer, materials }) {
     g.rotation.y = facing === 1 ? Math.PI / 2 : -Math.PI / 2
     root.add(g)
 
-    const w = 15
-    const d = 11
-    const h = job.floors * 3.1
+    const w = 12.5
+    const d = 9.5
+    const h = job.floors * 2.7
 
     const tower = P.meshOf(new RoundedBoxGeometry(w, h, d, 3, 0.22), P.std(C.cream, { roughness: 0.85 }))
     tower.position.y = h / 2
@@ -374,7 +389,7 @@ export function buildWorld({ scene, world, renderer, materials }) {
         for (const zz of [d / 2 + 0.02, -d / 2 - 0.02]) {
           windowSlots.push({
             group: g,
-            local: new THREE.Vector3(-w / 2 + 2.6 + c * 3.2, 2.1 + f * 3.1, zz),
+            local: new THREE.Vector3(-w / 2 + 2.2 + c * 2.7, 1.9 + f * 2.7, zz),
           })
         }
       }
@@ -398,9 +413,9 @@ export function buildWorld({ scene, world, renderer, materials }) {
         width: 1024,
         height: 420,
       }),
-      width: 12,
-      height: 4.9,
-      postHeight: 0.6,
+      width: 10.5,
+      height: 4.3,
+      postHeight: 0.5,
       frame: job.accent,
     })
     roofSign.position.set(0, h + 0.6, 0)
@@ -416,33 +431,33 @@ export function buildWorld({ scene, world, renderer, materials }) {
     lampA.rotation.y = Math.PI
     g.add(lampA)
 
-    staticBox(tower, { x: w + 2.2, y: h, z: d + 2.2 }, { x, y: h / 2, z }, g.rotation.y)
-    obstacles.push({ x, z, r: 18 })
+    staticBox(tower, { x: w + 2, y: h, z: d + 2 }, { x, y: h / 2, z }, g.rotation.y)
+    obstacles.push({ x, z, r: 16 })
 
     addPOI({
       id: job.id,
       kind: 'job',
       data: job,
-      position: new THREE.Vector3(x + facing * 12, 1, z),
-      radius: 12,
+      position: new THREE.Vector3(x + facing * 10.5, 1, z),
+      radius: 11,
       title: job.company,
     })
 
-    addMarker(x + facing * 12, z, job.accent)
+    addMarker(x + facing * 10.5, z, job.accent)
     // High above the roof, so it reads from across the map without looming over
     // the spot where the player actually parks.
-    addLabel(job.company.toUpperCase(), new THREE.Vector3(x, h + 9.5, z), {
+    addLabel(job.company.toUpperCase(), new THREE.Vector3(x, h + 8, z), {
       height: 1.1,
       bg: `rgba(${hexToRgb(job.accent)},0.95)`,
     })
   }
 
   function buildStatsPlaza() {
-    buildArch({ x: 0, z: -84, width: 18, height: 8, color: C.coral, label: 'IMPACT', accent: C.cream })
+    buildArch({ x: 0, z: -74, width: 16, height: 7.5, color: C.coral, label: 'IMPACT', accent: C.cream })
 
     // Two markers a side, lining the final stretch of the experience avenue.
     const slots = [
-      [-12, -92], [12, -92], [-12, -102], [12, -102],
+      [-11, -80], [11, -80], [-11, -90], [11, -90],
     ]
     STATS.forEach((s, i) => {
       const [x, z] = slots[i]
@@ -474,12 +489,12 @@ export function buildWorld({ scene, world, renderer, materials }) {
   function buildSkillYard() {
     const { x: cx, z: cz } = ZONES.skills
     buildArch({
-      x: cx - 30, z: 0, rotY: Math.PI / 2,
-      width: 16, height: 8.5, color: C.teal, label: 'SKILLS YARD', accent: C.cream,
+      x: cx - 27, z: 0, rotY: Math.PI / 2,
+      width: 15, height: 8, color: C.teal, label: 'SKILLS YARD', accent: C.cream,
     })
 
     const cols = 3
-    const spacing = 17
+    const spacing = 15.5
     SKILL_GROUPS.forEach((group, i) => {
       const gx = cx + ((i % cols) - 1) * spacing
       const gz = cz + (Math.floor(i / cols) - 1) * spacing
@@ -490,7 +505,7 @@ export function buildWorld({ scene, world, renderer, materials }) {
       id: 'skills',
       kind: 'skills',
       position: new THREE.Vector3(cx, 1, cz),
-      radius: 26,
+      radius: 24,
       title: 'Technical Skills',
     })
   }
@@ -498,12 +513,12 @@ export function buildWorld({ scene, world, renderer, materials }) {
   function buildSkillStack(group, gx, gz) {
     // Small plinth + group label, then a pyramid of crates to knock over.
     obstacles.push({ x: gx, z: gz, r: 9 })
-    const plinth = P.meshOf(new THREE.CylinderGeometry(5.4, 5.8, 0.4, 24), P.std(C.sand, { roughness: 0.95 }))
+    const plinth = P.meshOf(new THREE.CylinderGeometry(4.9, 5.3, 0.4, 24), P.std(C.sand, { roughness: 0.95 }))
     plinth.position.set(gx, 0.2, gz)
     plinth.receiveShadow = true
     root.add(plinth)
 
-    const ring = P.meshOf(new THREE.TorusGeometry(5.4, 0.16, 6, 32), P.std(group.color))
+    const ring = P.meshOf(new THREE.TorusGeometry(4.9, 0.16, 6, 32), P.std(group.color))
     ring.rotation.x = Math.PI / 2
     ring.position.set(gx, 0.42, gz)
     root.add(ring)
@@ -532,11 +547,18 @@ export function buildWorld({ scene, world, renderer, materials }) {
         mesh.rotation.y = (c * 0.09 - 0.1) * (r + 1)
         root.add(mesh)
         const body = P.boxBody({
-          world, size: { x: size, y: size, z: size }, position: pos, mass: 2.6, material: materials.prop,
+          world,
+          size: { x: size, y: size, z: size },
+          position: pos,
+          mass: 2.6,
+          material: materials.prop,
+          quaternion: new CANNON.Quaternion().setFromEuler(0, mesh.rotation.y, 0),
         })
-        body.quaternion.setFromEuler(0, mesh.rotation.y, 0)
         body.angularDamping = 0.25
         dynamics.push({ mesh, body })
+        breakables.adopt(body, mesh, {
+          breakAt: 5.5, chunkColor: group.color, chunks: 7, chunkSize: 0.8,
+        })
       })
     })
   }
@@ -626,21 +648,21 @@ export function buildWorld({ scene, world, renderer, materials }) {
     addPOI({
       id: 'education',
       kind: 'education',
-      position: new THREE.Vector3(cx + 16, 1, cz),
-      radius: 14,
+      position: new THREE.Vector3(cx + 14, 1, cz),
+      radius: 13,
       title: EDUCATION.school,
     })
-    addMarker(cx + 16, cz, C.violet)
-    addLabel('EDUCATION', new THREE.Vector3(cx, 20, cz), { height: 1.1, bg: 'rgba(122,108,240,0.95)' })
+    addMarker(cx + 14, cz, C.violet)
+    addLabel('EDUCATION', new THREE.Vector3(cx, 18, cz), { height: 1.1, bg: 'rgba(122,108,240,0.95)' })
   }
 
   // --- Contact -----------------------------------------------------------
   function buildContactPlaza() {
     const { x: cx, z: cz } = ZONES.contact
-    buildArch({ x: 0, z: cz - 30, width: 18, height: 9, color: C.amber, label: 'GET IN TOUCH', accent: C.navy })
+    buildArch({ x: 0, z: cz - 26, width: 16, height: 8.5, color: C.amber, label: 'GET IN TOUCH', accent: C.navy })
 
     CONTACT_LINKS.forEach((link, i) => {
-      const x = cx + (i - 1) * 19
+      const x = cx + (i - 1) * 17
       const z = cz
       const g = new THREE.Group()
       g.position.set(x, 0, z)
@@ -746,6 +768,7 @@ export function buildWorld({ scene, world, renderer, materials }) {
           world, radius: 0.3, height: 1.6, position: { x: px, y: 0.8, z: pz }, mass: 1.6, material: materials.prop,
         })
         dynamics.push({ mesh, body, yOffset: -0.8 })
+        breakables.adopt(body, mesh, { breakAt: Infinity })
         n++
       }
     }
@@ -775,8 +798,8 @@ export function buildWorld({ scene, world, renderer, materials }) {
     })
 
     buildArch({
-      x: cx - 27, z: cz + 27, rotY: -Math.PI / 4,
-      width: 14, height: 7.5, color: C.violet, label: 'STUNT PARK', accent: C.amber,
+      x: cx - 25, z: cz + 25, rotY: -Math.PI / 4,
+      width: 13, height: 7, color: C.violet, label: 'STUNT PARK', accent: C.amber,
     })
   }
 
@@ -798,28 +821,123 @@ export function buildWorld({ scene, world, renderer, materials }) {
       world, radius: 0.48, height: 1.2, position: { x, y: 0.6, z }, mass: 5, material: materials.prop, segments: 10,
     })
     dynamics.push({ mesh, body, yOffset: -0.6 })
+    breakables.adopt(body, mesh, { breakAt: 6, chunkColor: color, chunks: 6, chunkSize: 0.8 })
   }
 
   // --- Scenery -----------------------------------------------------------
   function scatterScenery() {
-    const decor = new THREE.Group()
     const keepOut = [
-      ...Object.values(ZONES).map((z) => ({ x: z.x, z: z.z, r: 30 })),
+      ...Object.values(ZONES).map((z) => ({ x: z.x, z: z.z, r: 27 })),
       ...obstacles,
     ]
     const onRoad = (x, z) => {
-      if (Math.abs(x) < 9 && Math.abs(z) < 108) return true
-      if (Math.abs(z) < 9 && Math.abs(x) < 108) return true
+      if (Math.abs(x) < 9 && Math.abs(z) < 92) return true
+      if (Math.abs(z) < 9 && Math.abs(x) < 92) return true
       const r = Math.hypot(x, z)
-      if (Math.abs(r - 58) < 7) return true
+      if (Math.abs(r - 50) < 7) return true
       // The diagonal spur out to the stunt park.
-      if (Math.abs(x + z) < 9 && x > 20 && x < 90) return true
+      if (Math.abs(x + z) < 9 && x > 18 && x < 80) return true
       return false
+    }
+
+    // Instanced part pools. Six draw calls cover every tree, bush, rock and
+    // lamp in the world, however many of them the player knocks over.
+    const trunk = breakables.pool('trunk', () => ({
+      geometry: new THREE.CylinderGeometry(0.17, 0.26, 1, 7),
+      material: P.std(0x8a6a4a),
+    }), 140)
+    const leaf = breakables.pool('leaf', () => ({
+      geometry: new THREE.IcosahedronGeometry(1, 0),
+      material: P.std(0xffffff, { flatShading: true }),
+    }), 420)
+    const stone = breakables.pool('stone', () => ({
+      geometry: new THREE.DodecahedronGeometry(1, 0),
+      material: P.std(0xffffff, { flatShading: true }),
+    }), 90)
+    const pole = breakables.pool('pole', () => ({
+      geometry: new THREE.CylinderGeometry(0.09, 0.13, 1, 8),
+      material: P.std(C.navy, { roughness: 0.5 }),
+    }), 40)
+    const bulb = breakables.pool('bulb', () => ({
+      geometry: new THREE.SphereGeometry(0.26, 10, 8),
+      material: P.std(0xfff3cf, { emissive: 0xffe9a8, emissiveIntensity: 0.9, roughness: 0.3 }),
+    }), 40)
+
+    const leafShades = [0x5f9e52, 0x6fae5e, 0x54904a]
+
+    const plantTree = (x, z) => {
+      const h = 2.4 + rng() * 1.7
+      const trunkH = h * 0.55
+      const half = h * 0.72
+      const parts = [
+        {
+          pool: trunk,
+          matrix: mat4(0, -half + trunkH / 2, 0, trunkH, 1),
+          color: new THREE.Color(0xffffff),
+        },
+      ]
+      for (let i = 0; i < 2; i++) {
+        const size = (1.15 - i * 0.28) * (0.9 + rng() * 0.3)
+        parts.push({
+          pool: leaf,
+          matrix: mat4((rng() - 0.5) * 0.5, -half + trunkH + 0.35 + i * 0.75, (rng() - 0.5) * 0.5, size, size),
+          color: new THREE.Color(leafShades[Math.floor(rng() * leafShades.length)]),
+        })
+      }
+      breakables.add({
+        parts,
+        shape: new CANNON.Cylinder(0.55, 0.7, h * 1.44, 8),
+        mass: 26,
+        position: { x, y: half, z },
+        rotY: rng() * Math.PI * 2,
+        breakAt: 6,
+        chunkColor: 0x8a6a4a,
+        chunks: 7,
+        chunkSize: 0.9,
+      })
+    }
+
+    const plantBush = (x, z) => {
+      const size = 0.55 + rng() * 0.45
+      breakables.add({
+        parts: [{
+          pool: leaf,
+          matrix: mat4(0, 0, 0, size, size),
+          color: new THREE.Color(leafShades[Math.floor(rng() * leafShades.length)]),
+        }],
+        shape: new CANNON.Sphere(size * 0.85),
+        mass: 3,
+        position: { x, y: size * 0.8, z },
+        rotY: rng() * Math.PI * 2,
+        breakAt: 2.5,
+        chunkColor: 0x6fae5e,
+        chunks: 6,
+        chunkSize: 0.6,
+      })
+    }
+
+    const plantRock = (x, z) => {
+      const size = 0.6 + rng() * 0.8
+      breakables.add({
+        parts: [{
+          pool: stone,
+          matrix: mat4(0, 0, 0, size, new THREE.Vector3(size, size * 0.75, size * 0.9)),
+          color: new THREE.Color(0x9aa3ad).offsetHSL(0, 0, (rng() - 0.5) * 0.12),
+        }],
+        shape: new CANNON.Sphere(size * 0.8),
+        mass: 48,
+        position: { x, y: size * 0.7, z },
+        rotY: rng() * Math.PI * 2,
+        breakAt: 11,
+        chunkColor: 0x9aa3ad,
+        chunks: 6,
+        chunkSize: 0.85,
+      })
     }
 
     let placed = 0
     let guard = 0
-    while (placed < 190 && guard < 6000) {
+    while (placed < 130 && guard < 6000) {
       guard++
       const x = (rng() - 0.5) * 2 * (BOUNDS - 6)
       const z = (rng() - 0.5) * 2 * (BOUNDS - 6)
@@ -827,29 +945,33 @@ export function buildWorld({ scene, world, renderer, materials }) {
       if (keepOut.some((k) => Math.hypot(x - k.x, z - k.z) < k.r)) continue
 
       const roll = rng()
-      let obj
-      if (roll < 0.5) obj = P.tree(rng)
-      else if (roll < 0.78) obj = P.bush(rng)
-      else obj = P.rock(rng)
-      obj.position.set(x, 0, z)
-      obj.rotation.y = rng() * Math.PI * 2
-      decor.add(obj)
+      if (roll < 0.5) plantTree(x, z)
+      else if (roll < 0.8) plantBush(x, z)
+      else plantRock(x, z)
       placed++
     }
 
-    // Street lamps down the two main avenues.
+    // Street lamps down the two main avenues — knockable, like everything else.
+    const plantLamp = (x, z, rotY) => {
+      breakables.add({
+        parts: [
+          { pool: pole, matrix: mat4(0, 0, 0, 4.4, 1) },
+          { pool: bulb, matrix: mat4(Math.sin(rotY) * 0.84, 2.0, Math.cos(rotY) * 0.84, 1, 1) },
+        ],
+        shape: new CANNON.Cylinder(0.22, 0.22, 4.4, 6),
+        mass: 15,
+        position: { x, y: 2.2, z },
+        breakAt: 4.5,
+        chunkColor: C.navy,
+        chunks: 6,
+        chunkSize: 0.7,
+      })
+    }
     for (let i = -3; i <= 3; i++) {
       if (i === 0) continue
-      const l1 = P.lamp()
-      l1.position.set(-ROAD_W / 2 - 1.4, 0, i * 17)
-      decor.add(l1)
-      const l2 = P.lamp()
-      l2.position.set(i * 17, 0, -ROAD_W / 2 - 1.4)
-      l2.rotation.y = Math.PI / 2
-      decor.add(l2)
+      plantLamp(-ROAD_W / 2 - 1.8, i * 15, 0)
+      plantLamp(i * 15, -ROAD_W / 2 - 1.8, Math.PI / 2)
     }
-
-    root.add(P.mergeStatic(decor))
 
     // A small lake in the quiet quarter.
     const lake = P.meshOf(
@@ -858,11 +980,11 @@ export function buildWorld({ scene, world, renderer, materials }) {
       { cast: false }
     )
     lake.rotation.x = -Math.PI / 2
-    lake.position.set(-74, 0.06, 70)
+    lake.position.set(-64, 0.06, 60)
     root.add(lake)
     const shore = P.meshOf(new THREE.RingGeometry(17, 19.5, 40), P.std(C.sand, { roughness: 1 }), { cast: false })
     shore.rotation.x = -Math.PI / 2
-    shore.position.set(-74, 0.04, 70)
+    shore.position.set(-64, 0.04, 60)
     root.add(shore)
   }
 
@@ -909,8 +1031,8 @@ export function buildWorld({ scene, world, renderer, materials }) {
   // --- Collectibles ------------------------------------------------------
   function buildShards() {
     const spots = [
-      [34, 34], [-36, -30], [58, 30], [-58, -40], [22, -96],
-      [96, -22], [-96, 28], [-30, 90], [40, 86], [-74, 70],
+      [30, 30], [-32, -26], [50, 26], [-50, -34], [20, -82],
+      [82, -20], [-82, 24], [-26, 78], [36, 74], [-64, 60],
     ]
     const shardGeo = new THREE.OctahedronGeometry(0.9, 0)
     const shardMat = new THREE.MeshStandardMaterial({
@@ -945,6 +1067,12 @@ export function buildWorld({ scene, world, renderer, materials }) {
     camera.getWorldPosition(camPos)
     for (const sprite of billboarded) {
       sprite.rotation.y = Math.atan2(camPos.x - sprite.position.x, camPos.z - sprite.position.z)
+      // Fade out up close. These are wayfinding signs read from a distance; at
+      // arm's length they just fill the screen and hide what you drove up to.
+      const d = camPos.distanceTo(sprite.position)
+      const opacity = THREE.MathUtils.smoothstep(d, LABEL_FADE_NEAR, LABEL_FADE_FAR)
+      sprite.material.opacity = opacity
+      sprite.visible = opacity > 0.02
     }
     for (const obj of animated) {
       const cloth = obj.userData.cloth
@@ -966,6 +1094,7 @@ export function buildWorld({ scene, world, renderer, materials }) {
 
   function syncDynamics() {
     for (const d of dynamics) {
+      if (!d.mesh.visible) continue
       d.mesh.position.copy(d.body.position)
       d.mesh.quaternion.copy(d.body.quaternion)
       if (d.yOffset) {
@@ -978,7 +1107,7 @@ export function buildWorld({ scene, world, renderer, materials }) {
     }
   }
 
-  return { root, pois, shards, dynamics, update, syncDynamics, ground }
+  return { root, pois, shards, dynamics, breakables, update, syncDynamics, ground }
 }
 
 function hexToRgb(n) {

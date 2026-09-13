@@ -7,6 +7,8 @@ export class Controls {
     this.touch = { forward: false, back: false, left: false, right: false, brake: false }
     this.lastInputAt = 0
     this.hasDriven = false
+    // Camera zoom multiplier, remembered between visits.
+    this.zoom = clampZoom(Number(readStored('zoom')) || 1)
     this._listeners = { interact: [], reset: [], camera: [] }
 
     this._onKeyDown = (e) => {
@@ -17,13 +19,45 @@ export class Controls {
       if (k === 'e' || k === 'enter') this._emit('interact')
       if (k === 'r') this._emit('reset')
       if (k === 'c') this._emit('camera')
+      if (k === '+' || k === '=') this.setZoom(this.zoom / 1.12)
+      if (k === '-' || k === '_') this.setZoom(this.zoom * 1.12)
     }
     this._onKeyUp = (e) => this.keys.delete(e.key.toLowerCase())
     this._onBlur = () => this.keys.clear()
 
+    this._onWheel = (e) => {
+      e.preventDefault()
+      this.setZoom(this.zoom * (e.deltaY > 0 ? 1.08 : 1 / 1.08))
+    }
+
+    // Pinch to zoom, tracked as the distance between the first two touches.
+    this._pinch = null
+    this._onTouchStart = (e) => {
+      if (e.touches.length === 2) this._pinch = touchGap(e.touches)
+    }
+    this._onTouchMove = (e) => {
+      if (e.touches.length !== 2 || !this._pinch) return
+      const gap = touchGap(e.touches)
+      if (gap > 0) this.setZoom(this.zoom * (this._pinch / gap))
+      this._pinch = gap
+    }
+    this._onTouchEnd = () => {
+      this._pinch = null
+    }
+
     window.addEventListener('keydown', this._onKeyDown)
     window.addEventListener('keyup', this._onKeyUp)
     window.addEventListener('blur', this._onBlur)
+    window.addEventListener('wheel', this._onWheel, { passive: false })
+    window.addEventListener('touchstart', this._onTouchStart, { passive: true })
+    window.addEventListener('touchmove', this._onTouchMove, { passive: true })
+    window.addEventListener('touchend', this._onTouchEnd, { passive: true })
+  }
+
+  setZoom(value) {
+    this.zoom = clampZoom(value)
+    writeStored('zoom', this.zoom.toFixed(3))
+    return this.zoom
   }
 
   on(event, fn) {
@@ -96,5 +130,32 @@ export class Controls {
     window.removeEventListener('keydown', this._onKeyDown)
     window.removeEventListener('keyup', this._onKeyUp)
     window.removeEventListener('blur', this._onBlur)
+    window.removeEventListener('wheel', this._onWheel)
+    window.removeEventListener('touchstart', this._onTouchStart)
+    window.removeEventListener('touchmove', this._onTouchMove)
+    window.removeEventListener('touchend', this._onTouchEnd)
+  }
+}
+
+const clampZoom = (v) => Math.min(2.4, Math.max(0.6, v))
+
+const touchGap = (touches) =>
+  Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
+
+// Storage is a nicety, not a requirement — private windows and blocked site
+// data both throw, and the game must start regardless.
+function readStored(key) {
+  try {
+    return localStorage.getItem('portfolio:' + key)
+  } catch {
+    return null
+  }
+}
+
+function writeStored(key, value) {
+  try {
+    localStorage.setItem('portfolio:' + key, value)
+  } catch {
+    /* ignore */
   }
 }

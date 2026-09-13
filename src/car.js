@@ -5,6 +5,16 @@ import { C } from './palette.js'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
+// Air-levelling gains: proportional pull towards level, and damping on the
+// tumble rate so the correction settles instead of overshooting.
+const LEVEL_P = 5
+const LEVEL_D = 2.4
+
+// Roll resistance on the ground. Enough to stop a slide tipping the car over,
+// gentle enough that a deliberate stunt still looks like one.
+const ROLL_P = 9
+const ROLL_D = 3.5
+
 // Chassis dimensions (metres). Forward is +Z, right is +X, up is +Y.
 const BODY = { w: 1.86, h: 0.54, l: 4.0 }
 const WHEEL = { radius: 0.44, width: 0.36 }
@@ -16,6 +26,8 @@ const ENGINE_FORCE = 560
 const REVERSE_FORCE = 300
 const BRAKE_FORCE = 34
 const HANDBRAKE_FORCE = 120
+const GRIP = 3.6
+const SLIDE_GRIP = 1.05
 const IDLE_BRAKE = 3.2
 
 const mat = (color, opts = {}) =>
@@ -165,10 +177,12 @@ export class Car {
       directionLocal: new CANNON.Vec3(0, -1, 0),
       suspensionStiffness: 44,
       suspensionRestLength: 0.48,
-      frictionSlip: 3.6,
+      frictionSlip: GRIP,
       dampingRelaxation: 2.8,
       dampingCompression: 4.7,
-      maxSuspensionForce: 100000,
+      // Capped well below cannon's default: an uncapped spring can pole-vault
+      // the car off its outside wheels during a hard slide.
+      maxSuspensionForce: 14000,
       rollInfluence: 0.015,
       axleLocal: new CANNON.Vec3(1, 0, 0),
       chassisConnectionPointLocal: new CANNON.Vec3(),
@@ -201,8 +215,13 @@ export class Car {
     this.braking = false
     this.airborne = false
     this.grounded = 4
+    this.airTime = 0
     this.stuckFor = 0
+    this.stuckAnchor = null
     this.flippedFor = 0
+    this._axis = new THREE.Vector3()
+    this._right = new THREE.Vector3()
+    this._fwd = new THREE.Vector3()
     this._v = new THREE.Vector3()
   }
 
@@ -242,16 +261,31 @@ export class Car {
       engine = 0
       brake = HANDBRAKE_FORCE
     }
+    // Locking the rears with full grip makes the car trip over itself and roll.
+    // Dropping their friction turns the handbrake into a slide, which is both
+    // safer and what a handbrake is for.
+    const slip = input.handbrake ? SLIDE_GRIP : GRIP
+    this.vehicle.wheelInfos[2].frictionSlip = slip
+    this.vehicle.wheelInfos[3].frictionSlip = slip
 
     // Rear-wheel drive with a little front assist for grip out of corners.
     this.vehicle.applyEngineForce(engine * 0.35, 0)
     this.vehicle.applyEngineForce(engine * 0.35, 1)
     this.vehicle.applyEngineForce(engine, 2)
     this.vehicle.applyEngineForce(engine, 3)
-    for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i)
+    if (input.handbrake) {
+      // Rear-only, as a handbrake actually is. Locking the front wheels as well
+      // pivots the car around its nose and rolls it.
+      this.vehicle.setBrake(HANDBRAKE_FORCE * 0.12, 0)
+      this.vehicle.setBrake(HANDBRAKE_FORCE * 0.12, 1)
+      this.vehicle.setBrake(HANDBRAKE_FORCE, 2)
+      this.vehicle.setBrake(HANDBRAKE_FORCE, 3)
+    } else {
+      for (let i = 0; i < 4; i++) this.vehicle.setBrake(brake, i)
+    }
 
     // Soft top-speed limiter.
-    const max = 25
+    const max = 21
     if (this.speed > max) {
       const s = max / this.speed
       v.x *= s
@@ -260,13 +294,42 @@ export class Car {
 
     this.tailMat.emissiveIntensity = this.braking ? 2.6 : 0.6
 
-    // Gentle downforce keeps the car planted over ramps and crests.
+    // Gentle downforce keeps the car planted over ramps and crests. The force
+    // must be applied at the centre of mass: cannon's second argument is a point
+    // *relative to* the centre of mass, so passing a world position turns the
+    // downforce into a torque with a lever arm the length of the car's distance
+    // from the world origin — which flips the car the further out it drives.
     const grounded = this.grounded
     this.airborne = grounded === 0
     if (grounded >= 3 && this.speed > 6) {
-      this.chassisBody.applyForce(new CANNON.Vec3(0, -this.speed * 26, 0), this.chassisBody.position)
+      this.chassisBody.applyForce(new CANNON.Vec3(0, -this.speed * 26, 0))
     }
-    if (this.airborne) this._stabilise(dt)
+
+    // A wheel lifting over a kerb is not a jump. Levelling only makes sense once
+    // the car is properly airborne; applied on every little bump it pumps spin
+    // into the chassis instead of taking it out.
+    this.airTime = this.airborne ? this.airTime + dt : 0
+    if (this.airTime > 0.15) this._stabilise(dt)
+    else if (grounded > 0) this._resistRoll(dt)
+  }
+
+  /**
+   * Keep the car from tipping onto its side. Only roll — rotation about the
+   * car's own forward axis — is corrected; pitch is left alone so ramps, crests
+   * and jumps still read honestly.
+   */
+  _resistRoll(dt) {
+    const right = this._right.set(1, 0, 0).applyQuaternion(this.mesh.quaternion)
+    const roll = Math.asin(THREE.MathUtils.clamp(right.y, -1, 1))
+    if (Math.abs(roll) < 0.22) return
+
+    const fwd = this._fwd.set(0, 0, 1).applyQuaternion(this.mesh.quaternion).normalize()
+    const w = this.chassisBody.angularVelocity
+    const rollRate = w.x * fwd.x + w.y * fwd.y + w.z * fwd.z
+    const correct = (-roll * ROLL_P - rollRate * ROLL_D) * dt
+    w.x += fwd.x * correct
+    w.y += fwd.y * correct
+    w.z += fwd.z * correct
   }
 
   /**
@@ -275,21 +338,17 @@ export class Car {
    * coin flip between landing and ending up on the roof.
    */
   _stabilise(dt) {
-    const body = this.chassisBody
+    const w = this.chassisBody.angularVelocity
     const up = UP.clone().applyQuaternion(this.mesh.quaternion)
-    // Axis that rotates the car's up vector back onto the world's.
-    const axis = new THREE.Vector3().crossVectors(up, UP)
-    const tilt = axis.length()
-    if (tilt > 0.002) {
-      const strength = 14 * dt
-      body.angularVelocity.x += axis.x * strength
-      body.angularVelocity.y += axis.y * strength
-      body.angularVelocity.z += axis.z * strength
-    }
-    // Bleed off tumble so the car settles rather than spinning through landing.
-    const damp = Math.exp(-2.6 * dt)
-    body.angularVelocity.x *= damp
-    body.angularVelocity.z *= damp
+    // Rotating the car's up vector back onto the world's. The cross product has
+    // no yaw component, so this never fights the heading the player chose.
+    const axis = this._axis.crossVectors(up, UP)
+
+    // Spring towards level, damped by the current tumble rate. A plain
+    // proportional push accumulates: it keeps adding rotation every frame and
+    // spins the car far past level instead of settling it.
+    w.x += (axis.x * LEVEL_P - w.x * LEVEL_D) * dt
+    w.z += (axis.z * LEVEL_P - w.z * LEVEL_D) * dt
   }
 
   sync() {
@@ -328,20 +387,41 @@ export class Car {
     }
 
     const trying = Math.abs(input.throttle) > 0.1 && !input.handbrake
-    if (trying && this.speed < 0.9) this.stuckFor += dt
-    else this.stuckFor = 0
-    if (this.stuckFor > 1.8) {
+    if (!trying) {
       this.stuckFor = 0
+      this.stuckAnchor = null
+      return null
+    }
+
+    // Judge by ground actually covered rather than instantaneous speed. Shoving
+    // a stack of crates, easing up a ramp or parking are all slow on purpose,
+    // and interrupting them reads as the car misbehaving.
+    if (!this.stuckAnchor) this.stuckAnchor = this.position.clone()
+    if (this.position.distanceTo(this.stuckAnchor) > 1.2) {
+      this.stuckAnchor.copy(this.position)
+      this.stuckFor = 0
+      return null
+    }
+
+    this.stuckFor += dt
+    if (this.stuckFor > 2.6) {
+      this.stuckFor = 0
+      this.stuckAnchor = null
       return 'free'
     }
     return null
   }
 
-  /** Small upward hop that frees the car from whatever it is sitting on. */
-  hop() {
+  /**
+   * Lift a beached car just clear of whatever it is resting on. Deliberately a
+   * small settle rather than a hop — a visible leap into the air looks like a
+   * bug to anyone who didn't realise they were stuck.
+   */
+  freeUp() {
     const b = this.chassisBody
     b.wakeUp()
-    b.velocity.y = 5.2
+    b.position.y += 0.5
+    b.velocity.set(b.velocity.x * 0.4, 1.3, b.velocity.z * 0.4)
     b.angularVelocity.setZero()
   }
 

@@ -41,11 +41,13 @@ export class UI {
 
     const coarseHint = window.matchMedia('(pointer: coarse)').matches
     document.getElementById('load-hint').innerHTML = coarseHint
-      ? `Use the on-screen pads to drive.<br>Pull up to a building and tap <b>Open</b> to read it.
+      ? `Use the on-screen pads to drive. Pinch to zoom out.<br>
+         Pull up to a building and tap <b>Open</b> to read it.
          Prefer plain text? Tap <b>CV</b> in the top bar.`
       : `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows to drive &nbsp;·&nbsp;
          <kbd>Space</kbd> handbrake &nbsp;·&nbsp; <kbd>E</kbd> to read &nbsp;·&nbsp; <kbd>R</kbd> to reset<br>
-         Drive up to a building to open it. Prefer plain text? Hit <b>CV</b> in the top bar.`
+         Scroll to zoom out. Everything you can see can be knocked over.<br>
+         Prefer plain text? Hit <b>CV</b> in the top bar.`
 
     this.startBtn.addEventListener('click', () => this.onStart())
     document.getElementById('panel-close').addEventListener('click', () => this.closePanel())
@@ -354,7 +356,8 @@ export class UI {
       sub: 'No résumé content here. Just ramps.',
       body: `
         <p>Hit the big red kicker at speed, aim for the barrels, and see if you can bowl a strike with the pins by the fence.</p>
-        <p style="color:var(--muted)">Landed upside down? Press <b>R</b> to reset, or the ↻ button.</p>`,
+        <p style="color:var(--muted)">Landed upside down? The car rights itself after a moment —
+        or press <b>R</b> to reset immediately.</p>`,
     })
   }
 
@@ -369,10 +372,15 @@ export class UI {
           <li><b>W / ↑</b> accelerate · <b>S / ↓</b> brake and reverse</li>
           <li><b>A / ←</b> and <b>D / →</b> steer</li>
           <li><b>Space</b> handbrake · <b>R</b> reset the car · <b>C</b> switch camera</li>
+          <li><b>Scroll</b> (or pinch, or <b>+</b> / <b>&minus;</b>) to zoom the camera out over the map</li>
           <li><b>E</b> or <b>Enter</b> opens whatever you are parked next to</li>
           <li>A gamepad works too — left stick and triggers</li>
           <li>On a phone, use the on-screen pads</li>
         </ul>
+        <h4>Everything is solid</h4>
+        <p>Trees, rocks, lamps, barrels and every skill crate can be shoved,
+        knocked over and smashed. Hit something hard enough and it breaks apart.
+        Nothing you wreck matters — it is all scenery.</p>
         <h4>Not here to play?</h4>
         <p>The <b>CV</b> button in the top bar shows the whole résumé as plain, selectable, printable text.</p>`,
     })

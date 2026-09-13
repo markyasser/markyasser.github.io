@@ -11,14 +11,14 @@ import { Audio } from './audio.js'
 import { SHARD_FACTS } from './data.js'
 
 const FIXED_STEP = 1 / 60
-const SPAWN = new THREE.Vector3(0, 1.6, 30)
+const SPAWN = new THREE.Vector3(0, 1.6, 34)
 const SPAWN_HEADING = Math.PI
 
 // Chase / wide / overhead. Offsets are in the car's local frame.
 const CAMERA_MODES = [
-  { name: 'chase', offset: new THREE.Vector3(0, 4.6, -10.5), lookAhead: 7, damp: 3.6 },
-  { name: 'wide', offset: new THREE.Vector3(0, 9.5, -17), lookAhead: 10, damp: 2.4 },
-  { name: 'overhead', offset: new THREE.Vector3(0, 22, -0.01), lookAhead: 3, damp: 5 },
+  { name: 'chase', offset: new THREE.Vector3(0, 7.6, -14), lookAhead: 8, damp: 3.6 },
+  { name: 'wide', offset: new THREE.Vector3(0, 13.5, -22), lookAhead: 11, damp: 2.4 },
+  { name: 'overhead', offset: new THREE.Vector3(0, 32, -9), lookAhead: 4, damp: 5 },
 ]
 
 /**
@@ -147,6 +147,9 @@ class App {
       world: this.world,
       renderer: this.renderer,
       materials: this.materials,
+      onBreak: () => {
+        this.smashed = (this.smashed || 0) + 1
+      },
     })
 
     await step(0.62, 'Unloading the crates…')
@@ -236,10 +239,38 @@ class App {
 
   _onCollide(event) {
     const other = event.body
-    if (!other || other.mass === 0) return
-    const v = this.car.chassisBody.velocity
-    const impact = Math.hypot(v.x, v.y, v.z)
-    if (impact > 4) this.audio.thud(Math.min(3, impact / 7))
+    if (!other) return
+    // Closing speed along the contact normal is the honest measure of a hit;
+    // raw velocity counts a car sliding past a wall as a collision.
+    const impact = Math.abs(event.contact.getImpactVelocityAlongNormal())
+    if (impact < 1.8) return
+
+    const result = this.worldRefs.breakables.impact(other, impact)
+    if (result && result.broke) {
+      this.audio.crack(Math.min(1.6, impact / 9))
+      this._shake(Math.min(1, impact / 11))
+      return
+    }
+
+    this.audio.thud(Math.min(3, impact / 6))
+    if (impact > 5) {
+      this._shake(Math.min(0.55, impact / 26))
+      // Buildings and signs don't break, but a hit should still leave a mark.
+      if (other.mass === 0) {
+        const c = event.contact
+        const base = c.bi === this.car.chassisBody ? c.bi : c.bj
+        const arm = c.bi === this.car.chassisBody ? c.ri : c.rj
+        this.worldRefs.breakables.puff(
+          new THREE.Vector3(base.position.x + arm.x, base.position.y + arm.y, base.position.z + arm.z),
+          { count: 4, size: 0.42, speed: impact * 0.5 }
+        )
+      }
+    }
+  }
+
+  /** Kick the camera briefly. Decays in _updateCamera. */
+  _shake(amount) {
+    this.shake = Math.min(1.2, (this.shake || 0) + amount)
   }
 
   _onResize() {
@@ -268,7 +299,7 @@ class App {
       if (recovery === 'right') {
         this.car.rightItself()
       } else if (recovery === 'free') {
-        // A hop frees a car beached on a prop. If that doesn't take, it is
+        // A lift frees a car beached on a prop. If that doesn't take, it is
         // wedged in scenery and only a proper reset will do.
         this._hops = (this._hops || 0) + 1
         if (this._hops >= 2) {
@@ -276,7 +307,7 @@ class App {
           this.car.reset(SPAWN, SPAWN_HEADING)
           this.ui.toast('Stuck — back to the start.', 2600)
         } else {
-          this.car.hop()
+          this.car.freeUp()
         }
       } else if (this.car.speed > 3) {
         this._hops = 0
@@ -293,6 +324,7 @@ class App {
 
       this.car.sync()
       this.worldRefs.syncDynamics()
+      this.worldRefs.breakables.update(dt)
       this._checkShards()
       this._checkPOI()
       this._guardBounds()
@@ -320,10 +352,13 @@ class App {
     if (forward.lengthSq() < 1e-4) forward.set(0, 0, 1)
     forward.normalize()
 
+    // Zoom scales how far back and how high the camera sits, so the player can
+    // trade a close driving view for an overview of the map.
+    const zoom = this.controls.zoom
     const desired = new THREE.Vector3()
       .copy(carPos)
-      .addScaledVector(forward, mode.offset.z)
-      .add(new THREE.Vector3(0, mode.offset.y, 0))
+      .addScaledVector(forward, mode.offset.z * zoom)
+      .add(new THREE.Vector3(0, mode.offset.y * zoom, 0))
 
     // Pull the camera up a little at speed for a sense of momentum.
     desired.y += Math.min(2.4, this.car.speed * 0.07)
@@ -345,6 +380,16 @@ class App {
     if (!this._lookAt) this._lookAt = target.clone()
     this._lookAt.lerp(target, 1 - Math.exp(-mode.damp * 1.4 * dt))
     this.camera.lookAt(this._lookAt)
+
+    if (this.shake > 0.001) {
+      const k = this.shake * 0.55
+      this.camera.position.x += (Math.random() - 0.5) * k
+      this.camera.position.y += (Math.random() - 0.5) * k
+      this.camera.position.z += (Math.random() - 0.5) * k
+      this.shake *= Math.exp(-7 * dt)
+    } else {
+      this.shake = 0
+    }
   }
 
   /**

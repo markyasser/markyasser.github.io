@@ -23,9 +23,14 @@ marking is drawn into a canvas at runtime, so the entire site is one JS bundle.
 Ten glowing shards are hidden around the map; each one reveals a fact about the
 work.
 
+Everything in the world is solid. Trees, rocks, street lamps, barrels and every
+skill crate can be shoved, knocked over and — hit hard enough — smashed into
+pieces.
+
 ## Controls
 
 - **W A S D** or arrow keys to drive, **Space** for the handbrake
+- **Scroll**, pinch, or **+** / **&minus;** to zoom the camera out over the map
 - **E** or **Enter** opens whatever you are parked next to
 - **R** resets the car, **C** cycles the camera
 - Gamepad: left stick and triggers
@@ -75,6 +80,7 @@ avenue. Nothing else needs touching.
 | `src/world.js` | Terrain, roads, zones, landmarks, collectibles |
 | `src/car.js` | Vehicle physics, body model, recovery behaviour |
 | `src/props.js` | Reusable props and physics-body helpers |
+| `src/breakables.js` | Instanced scenery, impact handling, the debris pool |
 | `src/textures.js` | Canvas-drawn signs, crate faces, the ground map |
 | `src/ui.js` | HUD, info panels, plain-text résumé |
 | `src/controls.js` | Keyboard, touch and gamepad input |
@@ -95,6 +101,13 @@ A few things are load-bearing and easy to break:
   dead instead of scattering.
 - **`updateWheelTransform` clears cannon's `isInContact` flags**, so the car
   reads its grounded state in `sync()` before touching the wheels.
+- **`applyForce`'s second argument is a point relative to the centre of mass**,
+  not a world position. Passing a world position turns a straight-line force
+  into a torque with a lever arm as long as the car's distance from the origin,
+  which flips the car the further out it drives.
+- **Never remove a body from inside a `collide` handler.** Those fire part-way
+  through `world.step()`, and removing a body there corrupts the solver's
+  working arrays. `breakables.js` queues breaks and applies them after the step.
 
 ## Credits
 

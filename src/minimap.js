@@ -1,6 +1,6 @@
 import { ZONES, BOUNDS } from './world.js'
 
-const VIEW = BOUNDS + 14
+const VIEW = BOUNDS + 12
 
 // Small top-down map. Redrawn every frame — it is only ~300px square, and the
 // static layer is pre-rendered to an offscreen canvas so the per-frame cost is
@@ -33,15 +33,15 @@ export class Minimap {
     ctx.lineWidth = s * 0.035
     ctx.lineCap = 'round'
     ctx.beginPath()
-    ctx.moveTo(this._p(0), this._p(-104))
-    ctx.lineTo(this._p(0), this._p(104))
-    ctx.moveTo(this._p(-104), this._p(0))
-    ctx.lineTo(this._p(104), this._p(0))
+    ctx.moveTo(this._p(0), this._p(-90))
+    ctx.lineTo(this._p(0), this._p(58))
+    ctx.moveTo(this._p(-52), this._p(0))
+    ctx.lineTo(this._p(86), this._p(0))
     ctx.stroke()
 
     ctx.lineWidth = s * 0.024
     ctx.beginPath()
-    ctx.arc(this._p(0), this._p(0), (58 / (VIEW * 2)) * s, 0, Math.PI * 2)
+    ctx.arc(this._p(0), this._p(0), (50 / (VIEW * 2)) * s, 0, Math.PI * 2)
     ctx.stroke()
 
     // Zone blobs.

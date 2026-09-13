@@ -100,6 +100,38 @@ export class Audio {
     osc.stop(t + 0.25)
   }
 
+  /** Splintering noise burst for something breaking apart. */
+  crack(intensity = 1) {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    const dur = 0.34
+
+    const len = Math.ceil(this.ctx.sampleRate * dur)
+    const buffer = this.ctx.createBuffer(1, len, this.ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+    for (let i = 0; i < len; i++) {
+      // Decaying noise, roughened so it reads as splintering rather than a hiss.
+      const fade = 1 - i / len
+      data[i] = (Math.random() * 2 - 1) * fade * fade * (i % 7 < 3 ? 1 : 0.4)
+    }
+    const src = this.ctx.createBufferSource()
+    src.buffer = buffer
+    const filter = this.ctx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.setValueAtTime(2600, t)
+    filter.frequency.exponentialRampToValueAtTime(420, t + dur)
+    filter.Q.value = 1.1
+    const gain = this.ctx.createGain()
+    gain.gain.value = Math.min(0.5, 0.3 * intensity)
+    src.connect(filter)
+    filter.connect(gain)
+    gain.connect(this.master)
+    src.start(t)
+    src.stop(t + dur)
+
+    this.thud(intensity * 1.6)
+  }
+
   /** Rising arpeggio for shard pickups. */
   chime() {
     if (!this.enabled || !this.ctx) return
