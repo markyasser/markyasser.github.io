@@ -1,4 +1,8 @@
 import * as THREE from 'three'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import * as CANNON from 'cannon-es'
 import { C } from './palette.js'
 import { Car } from './car.js'
@@ -103,38 +107,66 @@ class App {
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.06
+    this.renderer.toneMappingExposure = 1.25
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
   }
 
   _setupScene() {
     this.scene = new THREE.Scene()
-    this.scene.fog = new THREE.Fog(C.fog, 90, 340)
+    this.scene.fog = new THREE.Fog(C.fog, 80, 320)
 
     const aspect = window.innerWidth / window.innerHeight
     this.camera = new THREE.PerspectiveCamera(fovFor(aspect), aspect, 0.4, 1200)
     this.camera.position.set(0, 12, 46)
 
-    this.scene.add(new THREE.HemisphereLight(0xd8ecff, 0x6f8f5e, 1.25))
-    const ambient = new THREE.AmbientLight(0xffffff, 0.35)
-    this.scene.add(ambient)
+    // Blue hour. At 5am the sun is still below the horizon, so there is no warm
+    // key light at all — everything on the ground is lit by the sky. This is
+    // load-bearing: any warm directional light spread across a blue scene mixes
+    // to muddy violet on every surface it touches. All the warmth in this world
+    // comes from the horizon band of the sky and from things that are actually
+    // emitting light — windows, street lamps, shards.
+    this.scene.add(new THREE.HemisphereLight(0x8dbcf0, 0x22374f, 2.7))
+    this.scene.add(new THREE.AmbientLight(0x5480bd, 0.7))
 
-    const sun = new THREE.DirectionalLight(0xfff4dd, 2.1)
-    sun.position.set(60, 90, 40)
+    // Cool and soft: present only to give shapes a readable shadow.
+    const sun = new THREE.DirectionalLight(0xbcd8f5, 1.15)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     sun.shadow.camera.near = 1
-    sun.shadow.camera.far = 260
+    sun.shadow.camera.far = 220
     sun.shadow.bias = -0.0012
     sun.shadow.normalBias = 0.035
-    const d = 52
+    const d = 56
     Object.assign(sun.shadow.camera, { left: -d, right: d, top: d, bottom: -d })
     sun.shadow.camera.updateProjectionMatrix()
     this.scene.add(sun)
     this.scene.add(sun.target)
     this.sun = sun
 
+
+    this._setupComposer()
+
     window.addEventListener('resize', () => this._onResize())
+  }
+
+  /**
+   * Bloom is what turns the lit windows, street lamps and shards into actual
+   * light sources rather than pale paint. The threshold is deliberately high so
+   * only genuinely emissive surfaces bloom — a low one washes the whole scene.
+   */
+  _setupComposer() {
+    const w = window.innerWidth
+    const h = window.innerHeight
+    this.composer = new EffectComposer(this.renderer)
+    this.composer.addPass(new RenderPass(this.scene, this.camera))
+
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.62, 0.5, 0.72)
+    this.composer.addPass(this.bloom)
+    // OutputPass applies the renderer's tone mapping and output colour space,
+    // which RenderPass alone would skip.
+    this.composer.addPass(new OutputPass())
+    this.composer.setSize(w, h)
+    this.bloomEnabled = true
   }
 
   _setupPhysics() {
@@ -303,6 +335,7 @@ class App {
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(w, h)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.qualityScale)
+    if (this.composer) this.composer.setSize(w, h)
   }
 
   // -------------------------------------------------------------- loop
@@ -361,7 +394,8 @@ class App {
     this._followSun()
     this._adaptQuality(dt)
 
-    this.renderer.render(this.scene, this.camera)
+    if (this.bloomEnabled) this.composer.render()
+    else this.renderer.render(this.scene, this.camera)
   }
 
   _updateCamera(dt) {
@@ -468,7 +502,9 @@ class App {
   _followSun() {
     if (!this.car) return
     const p = this.car.position
-    this.sun.position.set(p.x + 58, 92, p.z + 42)
+    // Fairly high despite the hour: this is skylight standing in for the sun,
+    // and a low angle would rake shadows across the whole map.
+    this.sun.position.set(p.x + 46, 62, p.z + 34)
     this.sun.target.position.set(p.x, 0, p.z)
     this.sun.target.updateMatrixWorld()
   }
@@ -529,7 +565,12 @@ class App {
     if (this.frameTimes.length < 90) return
     const avg = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length
     this.frameTimes.length = 0
-    if (avg > 0.028 && this.qualityScale > 0.62) {
+    if (avg <= 0.028) return
+    if (this.bloomEnabled) {
+      this.bloomEnabled = false
+      return
+    }
+    if (this.qualityScale > 0.62) {
       this.qualityScale = Math.max(0.62, this.qualityScale - 0.18)
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.qualityScale)
       if (this.qualityScale <= 0.7) this.renderer.shadowMap.enabled = false

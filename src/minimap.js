@@ -25,11 +25,11 @@ export class Minimap {
     const s = this.size
     ctx.clearRect(0, 0, s, s)
 
-    ctx.fillStyle = '#dfe9d8'
+    ctx.fillStyle = '#132339'
     ctx.fillRect(0, 0, s, s)
 
     // Roads.
-    ctx.strokeStyle = '#cdbc95'
+    ctx.strokeStyle = '#41597f'
     ctx.lineWidth = s * 0.035
     ctx.lineCap = 'round'
     ctx.beginPath()
@@ -46,8 +46,8 @@ export class Minimap {
 
     // Zone blobs.
     const colors = {
-      hub: '#22304a', experience: '#ef6f5c', skills: '#2fb3a3',
-      education: '#7a6cf0', contact: '#f5b942', stunt: '#e2649b',
+      hub: '#cddcf5', experience: '#f5806b', skills: '#3fc9bf',
+      education: '#8f83f7', contact: '#f5b878', stunt: '#ef7ba8',
     }
     for (const [key, z] of Object.entries(ZONES)) {
       ctx.fillStyle = colors[key] || '#22304a'
@@ -59,7 +59,7 @@ export class Minimap {
     }
 
     // Border.
-    ctx.strokeStyle = 'rgba(34,48,74,0.25)'
+    ctx.strokeStyle = 'rgba(160,190,240,0.3)'
     ctx.lineWidth = s * 0.012
     ctx.strokeRect(this._p(-BOUNDS), this._p(-BOUNDS), this._p(BOUNDS) - this._p(-BOUNDS), this._p(BOUNDS) - this._p(-BOUNDS))
   }
@@ -72,7 +72,7 @@ export class Minimap {
 
     for (const shard of this.shards) {
       if (shard.collected) continue
-      ctx.fillStyle = '#f5b942'
+      ctx.fillStyle = '#ffd27a'
       ctx.beginPath()
       ctx.arc(this._p(shard.position.x), this._p(shard.position.z), s * 0.013, 0, Math.PI * 2)
       ctx.fill()
@@ -86,8 +86,8 @@ export class Minimap {
     ctx.save()
     ctx.translate(x, y)
     ctx.rotate(-angle)
-    ctx.fillStyle = '#ef6f5c'
-    ctx.strokeStyle = '#fff'
+    ctx.fillStyle = '#f5806b'
+    ctx.strokeStyle = '#eaf1ff'
     ctx.lineWidth = s * 0.009
     ctx.beginPath()
     ctx.moveTo(0, -s * 0.033)

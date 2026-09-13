@@ -128,7 +128,16 @@ export function billboard({ texture, width = 8, height = 4, postHeight = 2.4, fr
   const g = new THREE.Group()
 
   const panelGeo = new RoundedBoxGeometry(width, height, 0.26, 3, 0.1)
-  const faceMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.78, metalness: 0 })
+  // Signage is backlit. At this hour skylight alone leaves the panels too dim to
+  // read, and a lit sign is what a real forecourt board would be at 5am anyway.
+  const faceMat = new THREE.MeshStandardMaterial({
+    map: texture,
+    emissive: 0xffffff,
+    emissiveMap: texture,
+    emissiveIntensity: 0.5,
+    roughness: 0.78,
+    metalness: 0,
+  })
   const sideMat = std(frame, { roughness: 0.6 })
   // BoxGeometry material order: +x, -x, +y, -y, +z, -z
   const panel = new THREE.Mesh(panelGeo, [sideMat, sideMat, sideMat, sideMat, faceMat, sideMat])
@@ -170,7 +179,14 @@ export function floatingLabel(texture, height = 1.1) {
 
 /** A dynamic crate carrying a skill name on every face. */
 export function crate({ texture, size = 1.5 }) {
-  const mat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8, metalness: 0 })
+  const mat = new THREE.MeshStandardMaterial({
+    map: texture,
+    emissive: 0xffffff,
+    emissiveMap: texture,
+    emissiveIntensity: 0.28,
+    roughness: 0.8,
+    metalness: 0,
+  })
   const m = meshOf(new RoundedBoxGeometry(size, size, size, 2, 0.07), mat)
   return m
 }
@@ -355,4 +371,30 @@ export function mergeStatic(group) {
     merged.add(mesh)
   }
   return merged
+}
+
+/**
+ * A texture laid flat on the ground, lifted just clear of it. Backlit like the
+ * standing signage so it stays readable before sunrise.
+ */
+export function groundPanel(texture, width, depth, { rotY = 0 } = {}) {
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, depth),
+    new THREE.MeshStandardMaterial({
+      map: texture,
+      emissive: 0xffffff,
+      emissiveMap: texture,
+      emissiveIntensity: 0.62,
+      transparent: true,
+      depthWrite: false,
+      roughness: 0.9,
+    })
+  )
+  mesh.rotation.x = -Math.PI / 2
+  mesh.rotation.z = -rotY
+  mesh.position.y = 0.06
+  mesh.receiveShadow = false
+  mesh.castShadow = false
+  mesh.renderOrder = 2
+  return mesh
 }

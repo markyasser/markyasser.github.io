@@ -39,6 +39,34 @@ pieces.
 Anyone who would rather not play can hit **CV** in the top bar for the whole
 résumé as plain, selectable, printable text.
 
+## Look and light
+
+The world is set at blue hour, just before sunrise. That is a lighting rule as
+much as a palette: **there is no warm key light anywhere in the scene.** At 5am
+the sun is still below the horizon, so everything on the ground is lit by the
+sky. This matters more than it sounds — a warm directional light spread across a
+blue scene mixes to muddy violet on every surface it touches, which is exactly
+what the first attempt looked like. All the warmth here comes from the horizon
+band of the sky and from things that genuinely emit light: lit windows, street
+lamps, the shards, the car's headlights. A bloom pass makes those read as light
+sources rather than as pale paint.
+
+Signage is backlit for the same reason. Skylight alone leaves a panel too dim to
+read at this hour, and a lit forecourt board is what you would actually see at
+5am anyway.
+
+## Reading the CV from above
+
+The camera looks down, so anything mounted vertically on a building is seen
+almost edge-on. The ground is the one surface the player always has square on,
+so that is where the CV actually lives: each skill group, company, the degree
+and the contact links all have a lit panel lying flat beside them
+(`addGroundPanel` in `world.js`). The standing signs are atmosphere, and for the
+lower camera modes.
+
+A side effect worth keeping: smashing every crate in the skills yard does not
+destroy the information, because the list is painted on the ground next to it.
+
 ## The camera
 
 The default camera deliberately does **not** sit behind the car. A chase camera

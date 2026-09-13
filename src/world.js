@@ -6,7 +6,7 @@ import * as P from './props.js'
 import { Breakables } from './breakables.js'
 import {
   signTexture, heroTexture, crateTexture, statTexture,
-  labelTexture, groundTexture, skyTexture,
+  labelTexture, groundTexture, groundPanelTexture, skyTexture,
 } from './textures.js'
 import { PROFILE, EXPERIENCE, EDUCATION, SKILL_GROUPS, STATS, CONTACT_LINKS, SHARD_FACTS } from './data.js'
 
@@ -31,9 +31,9 @@ function WINDOW_GEO() {
 // shared one would dim every building at once.
 function windowMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: 0x8fd2e8,
-    emissive: 0x2b6d86,
-    emissiveIntensity: 0.45,
+    color: 0xffca7d,
+    emissive: 0xffb85e,
+    emissiveIntensity: 2.6,
     roughness: 0.25,
     metalness: 0.3,
   })
@@ -86,7 +86,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   // ---------------------------------------------------------------- sky
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(600, 32, 16),
-    new THREE.MeshBasicMaterial({ map: skyTexture(hex(C.skyTop), hex(C.skyBottom)), side: THREE.BackSide, fog: false })
+    new THREE.MeshBasicMaterial({ map: skyTexture(hex(C.skyTop), hex(C.skyHorizon), hex(C.skyMid)), side: THREE.BackSide, fog: false })
   )
   scene.add(sky)
 
@@ -118,12 +118,12 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     { points: [[-36, 40], [-60, 56]], width: 7, centerLine: false },
   ]
   const pads = [
-    { x: 0, z: 0, r: 16, color: '#e6d7b2' },
-    { x: ZONES.experience.x, z: -86, r: 17, color: '#ead9b8' },
-    { x: ZONES.skills.x, z: ZONES.skills.z, r: 25, color: '#e2d3ae' },
-    { x: ZONES.education.x, z: ZONES.education.z, r: 20, color: '#ead9b8' },
-    { x: ZONES.contact.x, z: ZONES.contact.z, r: 20, color: '#e2d3ae' },
-    { x: ZONES.stunt.x, z: ZONES.stunt.z, r: 24, color: '#dccfae' },
+    { x: 0, z: 0, r: 16, color: '#546a80' },
+    { x: ZONES.experience.x, z: -86, r: 17, color: '#50667c' },
+    { x: ZONES.skills.x, z: ZONES.skills.z, r: 25, color: '#4d6379' },
+    { x: ZONES.education.x, z: ZONES.education.z, r: 20, color: '#68789e' },
+    { x: ZONES.contact.x, z: ZONES.contact.z, r: 20, color: '#64749a' },
+    { x: ZONES.stunt.x, z: ZONES.stunt.z, r: 24, color: '#495e74' },
   ]
 
   const groundMap = groundTexture(renderer, { size: 2048, worldSize: WORLD_SIZE, roads, pads })
@@ -259,6 +259,23 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     }
   }
 
+  /**
+   * Lay a readable panel on the ground. The fixed camera looks down, so this is
+   * where the CV actually gets read; the standing signs are for atmosphere and
+   * for the lower camera modes.
+   */
+  function addGroundPanel(x, z, width, depth, opts) {
+    const tex = groundPanelTexture(renderer, {
+      ...opts,
+      width: 1024,
+      height: Math.round((1024 * depth) / width),
+    })
+    const panel = P.groundPanel(tex, width, depth)
+    panel.position.set(x, 0.06, z)
+    root.add(panel)
+    return panel
+  }
+
   /** A painted disc on the ground marking where a landmark opens. */
   function addMarker(x, z, color, radius = 5) {
     const disc = P.meshOf(
@@ -342,6 +359,14 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       root.add(post)
       P.cylinderBody({ world, radius: 0.3, height: 5.2, position: { x, y: 2.6, z }, mass: 0, material: materials.ground })
     }
+
+    addGroundPanel(0, 12, 22, 9, {
+      title: PROFILE.short,
+      note: `${PROFILE.title}  ·  ${PROFILE.location}`,
+      items: STATS.map((st) => `${st.value}  ${st.label}`),
+      accent: hex(C.coral),
+      columns: 2,
+    })
 
     addMarker(0, -4, C.coral, 6)
     addPOI({
@@ -434,7 +459,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const d = 9.5
     const h = job.floors * 2.7
 
-    const tower = P.meshOf(new RoundedBoxGeometry(w, h, d, 3, 0.22), P.std(C.cream, { roughness: 0.85 }))
+    const tower = P.meshOf(new RoundedBoxGeometry(w, h, d, 3, 0.22), P.std(C.wall, { roughness: 0.85 }))
     tower.position.y = h / 2
     g.add(tower)
 
@@ -521,6 +546,14 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       title: job.company,
     })
 
+    addGroundPanel(x + facing * 19, z, 17, 8, {
+      title: job.company,
+      note: `${job.role}  ·  ${job.period}`,
+      items: job.tags,
+      accent: hex(job.accent),
+      columns: 2,
+    })
+
     addMarker(x + facing * 10.5, z, job.accent)
     // High above the roof, so it reads from across the map without looming over
     // the spot where the player actually parks.
@@ -553,7 +586,12 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       const panel = P.meshOf(
         new RoundedBoxGeometry(5, 5, 0.4, 3, 0.16),
         [P.std(C.navy), P.std(C.navy), P.std(C.navy), P.std(C.navy),
-          new THREE.MeshStandardMaterial({ map: statTexture(renderer, { ...s, accent }), roughness: 0.8 }),
+          (() => {
+            const tex = statTexture(renderer, { ...s, accent })
+            return new THREE.MeshStandardMaterial({
+              map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.5, roughness: 0.8,
+            })
+          })(),
           P.std(C.navy)]
       )
       panel.position.y = 5.4
@@ -600,6 +638,13 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     ring.rotation.x = Math.PI / 2
     ring.position.set(gx, 0.42, gz)
     root.add(ring)
+
+    addGroundPanel(gx, gz + 8, 13, 5.6, {
+      title: group.label,
+      items: group.items,
+      accent: hex(group.color),
+      columns: group.items.length > 4 ? 2 : 1,
+    })
 
     addLabel(group.label.toUpperCase(), new THREE.Vector3(gx, 6.6, gz), {
       height: 0.85,
@@ -659,7 +704,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       g.add(step)
     }
 
-    const hall = P.meshOf(new RoundedBoxGeometry(19, 7.5, 12, 3, 0.25), P.std(C.cream, { roughness: 0.9 }))
+    const hall = P.meshOf(new RoundedBoxGeometry(19, 7.5, 12, 3, 0.25), P.std(C.wall, { roughness: 0.9 }))
     hall.position.y = 1.35 + 3.75
     g.add(hall)
 
@@ -730,6 +775,14 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       radius: 13,
       title: EDUCATION.school,
     })
+    addGroundPanel(cx + 26, cz, 17, 7.5, {
+      title: EDUCATION.school,
+      note: `${EDUCATION.degree}  ·  ${EDUCATION.period}`,
+      items: [EDUCATION.grade, 'Teaching Assistant, 2025'],
+      accent: hex(C.violet),
+      columns: 1,
+    })
+
     addMarker(cx + 14, cz, C.violet)
     addLabel('EDUCATION', new THREE.Vector3(cx, 18, cz), { height: 1.1, bg: 'rgba(122,108,240,0.95)' })
   }
@@ -771,6 +824,13 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
 
       P.boxBody({ world, size: { x: 2.6, y: 1.6, z: 2.6 }, position: { x, y: 0.8, z }, mass: 0, material: materials.ground })
       obstacles.push({ x, z, r: 10 })
+
+      addGroundPanel(x, z - 10, 14, 5, {
+        title: link.label,
+        items: [link.sub],
+        accent: hex(link.color === C.navy ? C.blue : link.color),
+        columns: 1,
+      })
 
       addMarker(x, z - 4, link.color, 4.5)
       addPOI({
@@ -938,7 +998,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     }), 40)
     const bulb = breakables.pool('bulb', () => ({
       geometry: new THREE.SphereGeometry(0.26, 10, 8),
-      material: P.std(0xfff3cf, { emissive: 0xffe9a8, emissiveIntensity: 0.9, roughness: 0.3 }),
+      material: P.std(0xfff3cf, { emissive: 0xffd79a, emissiveIntensity: 3.2, roughness: 0.3 }),
     }), 40)
 
     const leafShades = [0x5f9e52, 0x6fae5e, 0x54904a]
@@ -1116,7 +1176,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const shardMat = new THREE.MeshStandardMaterial({
       color: 0xfff0b8,
       emissive: 0xf5b942,
-      emissiveIntensity: 0.9,
+      emissiveIntensity: 2.8,
       roughness: 0.2,
       metalness: 0.4,
     })

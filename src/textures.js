@@ -346,7 +346,7 @@ export function groundTexture(renderer, { size = 2048, worldSize = 400, roads = 
   const toX = (x) => (x + worldSize / 2) * px
   const toY = (z) => (z + worldSize / 2) * px
 
-  ctx.fillStyle = '#9cc389'
+  ctx.fillStyle = '#24485c'
   ctx.fillRect(0, 0, size, size)
 
   // Subtle mottling so the grass isn't a flat colour field.
@@ -354,7 +354,7 @@ export function groundTexture(renderer, { size = 2048, worldSize = 400, roads = 
     const x = Math.random() * size
     const y = Math.random() * size
     const r = 6 + Math.random() * 26
-    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(134,176,117,0.30)' : 'rgba(178,205,155,0.26)'
+    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(26,56,72,0.4)' : 'rgba(52,96,116,0.3)'
     ctx.beginPath()
     ctx.arc(x, y, r, 0, Math.PI * 2)
     ctx.fill()
@@ -374,20 +374,20 @@ export function groundTexture(renderer, { size = 2048, worldSize = 400, roads = 
 
   // Pads first (plazas), then roads on top.
   for (const pad of pads) {
-    ctx.fillStyle = pad.color || '#e6d7b2'
+    ctx.fillStyle = pad.color || '#53697e'
     ctx.beginPath()
     ctx.arc(toX(pad.x), toY(pad.z), pad.r * px, 0, Math.PI * 2)
     ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)'
+    ctx.strokeStyle = 'rgba(214,226,250,0.45)'
     ctx.lineWidth = 0.6 * px
     ctx.stroke()
   }
 
-  for (const road of roads) strokePath(road.points, road.width + 1.6, '#f2eadb')
-  for (const road of roads) strokePath(road.points, road.width, '#d9c9a3')
+  for (const road of roads) strokePath(road.points, road.width + 1.6, '#6d8a9e')
+  for (const road of roads) strokePath(road.points, road.width, '#4a6378')
   for (const road of roads) {
     if (road.centerLine === false) continue
-    strokePath(road.points, 0.35, 'rgba(255,255,255,0.7)', true)
+    strokePath(road.points, 0.35, 'rgba(226,236,255,0.8)', true)
   }
 
   const tex = finish(canvas, renderer)
@@ -395,17 +395,114 @@ export function groundTexture(renderer, { size = 2048, worldSize = 400, roads = 
   return tex
 }
 
-/** Vertical sky gradient as a large inverted sphere texture. */
-export function skyTexture(top = '#2f6fc4', bottom = '#e6f2f7') {
-  const canvas = makeCanvas(4, 512)
+/**
+ * Vertical sky gradient. Three bands rather than two: deep blue overhead, a
+ * mid blue, then the narrow warm strip of first light along the horizon. The
+ * warm band is kept tight — spread it wider and the scene reads as sunset.
+ */
+export function skyTexture(top = '#0d1a38', horizon = '#f0a068', mid = '#2b4a80') {
+  const canvas = makeCanvas(4, 1024)
   const ctx = canvas.getContext('2d')
-  const g = ctx.createLinearGradient(0, 0, 0, 512)
+  const g = ctx.createLinearGradient(0, 0, 0, 1024)
   g.addColorStop(0, top)
-  g.addColorStop(0.48, '#93c4e4')
-  g.addColorStop(1, bottom)
+  g.addColorStop(0.34, top)
+  g.addColorStop(0.6, mid)
+  g.addColorStop(0.83, '#6b7fae')
+  g.addColorStop(0.93, '#c98f76')
+  g.addColorStop(1, horizon)
   ctx.fillStyle = g
-  ctx.fillRect(0, 0, 4, 512)
+  ctx.fillRect(0, 0, 4, 1024)
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+/**
+ * A panel meant to be read lying flat on the ground. With a fixed high camera,
+ * anything mounted vertically on a building is seen almost edge-on; the ground
+ * is the one surface the player always has square on. Dark panel, accent rule,
+ * light type — the same backlit-signage language as the billboards.
+ */
+export function groundPanelTexture(renderer, {
+  title,
+  items = [],
+  note = '',
+  accent = CSS.coral,
+  columns = 2,
+  width = 1024,
+  height = 440,
+}) {
+  const key = `gpanel|${title}|${items.join('~')}|${note}|${accent}|${columns}|${width}x${height}`
+  if (cache.has(key)) return cache.get(key)
+
+  const canvas = makeCanvas(width, height)
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, width, height)
+
+  const pad = 18
+  const r = 34
+  ctx.fillStyle = 'rgba(12,23,41,0.93)'
+  roundRect(ctx, pad, pad, width - pad * 2, height - pad * 2, r)
+  ctx.fill()
+  ctx.strokeStyle = accent
+  ctx.lineWidth = 7
+  roundRect(ctx, pad, pad, width - pad * 2, height - pad * 2, r)
+  ctx.stroke()
+
+  const innerX = pad + 46
+  const innerW = width - (pad + 46) * 2
+
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+
+  // Title
+  const tf = fitLines(ctx, title.toUpperCase(), innerW, 78, 800, 1)
+  ctx.font = `800 ${tf.size}px ${FONT_STACK}`
+  ctx.letterSpacing = '4px'
+  ctx.fillStyle = accent
+  ctx.fillText(title.toUpperCase(), innerX, pad + 84)
+  ctx.letterSpacing = '0px'
+
+  ctx.fillStyle = 'rgba(226,236,255,0.22)'
+  ctx.fillRect(innerX, pad + 126, innerW, 3)
+
+  if (note) {
+    ctx.font = `500 40px ${FONT_STACK}`
+    ctx.fillStyle = 'rgba(226,236,255,0.62)'
+    ctx.fillText(note, innerX, pad + 168)
+  }
+
+  // Items laid out in columns.
+  const top = pad + (note ? 214 : 176)
+  const bottom = height - pad - 34
+  const perCol = Math.ceil(items.length / columns)
+  const colW = innerW / columns
+  const lineH = Math.min(54, (bottom - top) / Math.max(1, perCol))
+  const fontSize = Math.min(42, lineH * 0.74)
+
+  items.forEach((item, i) => {
+    const col = Math.floor(i / perCol)
+    const row = i % perCol
+    const x = innerX + col * colW
+    const y = top + row * lineH + lineH / 2
+
+    ctx.fillStyle = accent
+    ctx.beginPath()
+    ctx.arc(x + 9, y, 7, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.font = `600 ${fontSize}px ${FONT_STACK}`
+    ctx.fillStyle = '#e2ecff'
+    const text = String(item)
+    let size = fontSize
+    while (ctx.measureText(text).width > colW - 46 && size > 16) {
+      size -= 2
+      ctx.font = `600 ${size}px ${FONT_STACK}`
+    }
+    ctx.fillText(text, x + 30, y)
+  })
+
+  const tex = finish(canvas, renderer, { transparent: true })
+  cache.set(key, tex)
   return tex
 }

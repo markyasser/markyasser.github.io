@@ -242,6 +242,9 @@ export class UI {
   }
 
   _open({ kicker, title, sub, body }) {
+    // Only one reading surface at a time; the resume and the drawer would
+    // otherwise cross-fade over each other.
+    this.resume.classList.remove('open')
     this.panelHead.innerHTML = `
       <div class="panel-kicker">${esc(kicker)}</div>
       <div class="panel-title">${esc(title)}</div>
