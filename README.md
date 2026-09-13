@@ -142,9 +142,10 @@ a row becomes one box, and the lot is merged so a letter costs a single draw
 call. The chunky silhouette is the point, since the default camera looks down
 on it from the air.
 
-They are the one sign in the world that cannot be destroyed. Heavy and
-well-damped, so a bump only rocks them and a real hit shoves one out of line —
-but nothing ever breaks them or takes them away.
+They are the one sign in the world that cannot be destroyed — but they are
+light, and barely damped. Nudging the name out of line is half the fun, so a
+gentle shunt moves a letter and a proper hit scatters one across the plaza.
+Nothing ever breaks them or takes them away.
 
 ## The camera
 
