@@ -1,5 +1,7 @@
 # Mark Yasser — Interactive 3D Portfolio
 
+**Live: https://markyasser.github.io/portfolio-3d/**
+
 A driving game that doubles as a résumé. The whole site is one WebGL scene: you
 steer a car around a small island and drive up to landmarks to read each part of
 the CV.
@@ -207,8 +209,13 @@ anything, so it drops onto any static host:
 - **Vercel** — `npx vercel --prod` from the project root, or connect the repo and
   accept the detected Vite settings.
 - **Netlify** — build command `npm run build`, publish directory `dist`.
-- **GitHub Pages** — push `dist/` to a `gh-pages` branch. `base: './'` in
-  `vite.config.js` means it already works from a project sub-path.
+- **GitHub Pages** — already set up. `.github/workflows/deploy.yml` builds and
+  publishes on every push to `main`; Pages is configured with GitHub Actions as
+  the source. `base: './'` in `vite.config.js` is what makes it work from a
+  project sub-path.
+
+  To serve it from the bare `markyasser.github.io` instead, rename the repo:
+  `gh repo rename markyasser.github.io`. Nothing in the build needs changing.
 - **Cloudflare Pages** — build command `npm run build`, output directory `dist`.
 
 `npm run build:artifact` additionally emits `dist/artifact.html` — the same page
