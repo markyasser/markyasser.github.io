@@ -229,6 +229,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       mass,
       material: materials.prop,
       quaternion: new CANNON.Quaternion().setFromEuler(0, rotY, 0),
+      sfx: 'metal',
     })
     body.angularDamping = 0.45
     body.linearDamping = 0.04
@@ -254,6 +255,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       size: { x: Math.max(1.7, (bannerW || 2.6) * 0.7), y: height, z: 0.6 },
       position: { x, y: height / 2, z },
       mass: 16,
+      sfx: 'metal',
       material: materials.prop,
       quaternion: new CANNON.Quaternion().setFromEuler(0, rotY, 0),
     })
@@ -374,7 +376,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
 
       const body = P.boxBody({
         world, size: { x: size, y: size, z: size }, position: { x, y: size / 2, z },
-        mass: 45, material: materials.prop,
+        mass: 45, material: materials.prop, sfx: 'metal',
       })
       body.angularDamping = 0.4
       dynamics.push({ mesh, body })
@@ -448,6 +450,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
           position: pos,
           mass: 1.8,
           material: materials.prop,
+          sfx: 'wood',
           quaternion: new CANNON.Quaternion().setFromEuler(0, mesh.rotation.y, 0),
         })
         body.angularDamping = 0.18
@@ -554,7 +557,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     cap.position.set(capPos.x, capPos.y, capPos.z)
     root.add(cap)
     const capBody = P.boxBody({
-      world, size: { x: 4.2, y: 1.5, z: 4.2 }, position: capPos, mass: 38, material: materials.prop,
+      world, size: { x: 4.2, y: 1.5, z: 4.2 }, position: capPos, mass: 38, material: materials.prop, sfx: 'wood',
     })
     capBody.angularDamping = 0.5
     dynamics.push({ mesh: cap, body: capBody })
@@ -666,7 +669,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const ph = phone.userData.half
     const phoneBody = P.boxBody({
       world, size: { x: ph.x * 2, y: ph.y * 2, z: ph.z * 2 },
-      position: { x: cx - 26, y: ph.y, z: cz - 12 }, mass: 70, material: materials.prop,
+      position: { x: cx - 26, y: ph.y, z: cz - 12 }, mass: 70, material: materials.prop, sfx: 'metal',
     })
     phoneBody.angularDamping = 0.55
     dynamics.push({ mesh: phone, body: phoneBody, yOffset: -ph.y })
@@ -680,7 +683,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const mh = post.userData.half
     const postBody = P.boxBody({
       world, size: { x: mh.x * 2, y: mh.y * 2, z: mh.z * 2 },
-      position: { x: cx + 26, y: 1.7, z: cz - 12 }, mass: 45, material: materials.prop,
+      position: { x: cx + 26, y: 1.7, z: cz - 12 }, mass: 45, material: materials.prop, sfx: 'metal',
     })
     postBody.angularDamping = 0.55
     dynamics.push({ mesh: post, body: postBody, yOffset: -1.7 })
@@ -747,7 +750,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
         mesh.position.set(px, 0, pz)
         root.add(mesh)
         const body = P.cylinderBody({
-          world, radius: 0.3, height: 1.6, position: { x: px, y: 0.8, z: pz }, mass: 1.6, material: materials.prop,
+          world, radius: 0.3, height: 1.6, position: { x: px, y: 0.8, z: pz }, mass: 1.6, material: materials.prop, sfx: 'plastic',
         })
         dynamics.push({ mesh, body, yOffset: -0.8 })
         breakables.adopt(body, mesh, { breakAt: Infinity })
@@ -788,7 +791,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     mesh.position.set(x, 0, z)
     root.add(mesh)
     const body = P.cylinderBody({
-      world, radius: 0.36, height: 1.0, position: { x, y: 0.5, z }, mass: 0.9, material: materials.prop, segments: 8,
+      world, radius: 0.36, height: 1.0, position: { x, y: 0.5, z }, mass: 0.9, material: materials.prop, segments: 8, sfx: 'plastic',
     })
     dynamics.push({ mesh, body, yOffset: -0.5 })
   }
@@ -798,7 +801,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     mesh.position.set(x, 0, z)
     root.add(mesh)
     const body = P.cylinderBody({
-      world, radius: 0.48, height: 1.2, position: { x, y: 0.6, z }, mass: 5, material: materials.prop, segments: 10,
+      world, radius: 0.48, height: 1.2, position: { x, y: 0.6, z }, mass: 5, material: materials.prop, segments: 10, sfx: 'metal',
     })
     dynamics.push({ mesh, body, yOffset: -0.6 })
     breakables.adopt(body, mesh, { breakAt: 6, chunkColor: color, chunks: 6, chunkSize: 0.8 })
@@ -844,6 +847,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       sleepSpeedLimit: 0.4,
       sleepTimeLimit: 1,
     })
+    ballBody.userData = { sfx: 'ball' }
     world.addBody(ballBody)
     dynamics.push({ mesh: ballMesh, body: ballBody })
 
@@ -949,6 +953,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       breakables.add({
         parts,
         shape: new CANNON.Cylinder(0.55, 0.7, h * 1.44, 8),
+        sfx: 'wood',
         mass: 26,
         position: { x, y: half, z },
         rotY: rng() * Math.PI * 2,
@@ -968,6 +973,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
           color: new THREE.Color(leafShades[Math.floor(rng() * leafShades.length)]),
         }],
         shape: new CANNON.Sphere(size * 0.85),
+        sfx: 'leaves',
         mass: 3,
         position: { x, y: size * 0.8, z },
         rotY: rng() * Math.PI * 2,
@@ -987,6 +993,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
           color: new THREE.Color(0x9aa3ad).offsetHSL(0, 0, (rng() - 0.5) * 0.12),
         }],
         shape: new CANNON.Sphere(size * 0.8),
+        sfx: 'stone',
         mass: 48,
         position: { x, y: size * 0.7, z },
         rotY: rng() * Math.PI * 2,
@@ -1021,6 +1028,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
           { pool: bulb, matrix: mat4(Math.sin(rotY) * 0.84, 2.0, Math.cos(rotY) * 0.84, 1, 1) },
         ],
         shape: new CANNON.Cylinder(0.22, 0.22, 4.4, 6),
+        sfx: 'metal',
         mass: 15,
         position: { x, y: 2.2, z },
         breakAt: 4.5,

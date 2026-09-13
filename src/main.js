@@ -253,6 +253,10 @@ class App {
   start() {
     this.ui.hideLoading()
     this.running = true
+    // The Start click is the gesture browsers require before audio may play, so
+    // this is the one moment sound can be switched on without the player having
+    // to go and find the button.
+    this.ui.setSound(this.audio.enable())
     this.clock.getDelta()
     this.ui.toast(
       this.ui.isTouch
@@ -322,7 +326,9 @@ class App {
         this._lastSpecial = now
         if (special.kind === 'phone') {
           this.ui.openPhone()
+          this.audio.ring()
         } else if (special.kind === 'mail') {
+          this.audio.mail()
           // Mail goes everywhere.
           this.worldRefs.breakables.puff(
             new THREE.Vector3(other.position.x, other.position.y + 1.2, other.position.z),
@@ -330,7 +336,7 @@ class App {
           )
           this.ui.openEmail()
         }
-        this.audio.thud(2)
+        this._impactVoice(other, impact)
         this._shake(0.4)
         return
       }
@@ -339,11 +345,13 @@ class App {
     const result = this.worldRefs.breakables.impact(other, impact)
     if (result && result.broke) {
       this.audio.crack(Math.min(1.6, impact / 9))
+      this._impactVoice(other, impact * 0.8)
       this._shake(Math.min(1, impact / 11))
       return
     }
 
-    this.audio.thud(Math.min(3, impact / 6))
+    // Each material has its own voice; anything untagged falls back to a thud.
+    this._impactVoice(other, impact)
     if (impact > 5) {
       this._shake(Math.min(0.55, impact / 26))
       // Buildings and signs don't break, but a hit should still leave a mark.
@@ -357,6 +365,14 @@ class App {
         )
       }
     }
+  }
+
+  /** Play whatever the thing we hit is made of. */
+  _impactVoice(body, impact) {
+    const strength = Math.min(2.2, impact / 6)
+    const voice = body.userData && body.userData.sfx
+    if (voice && typeof this.audio[voice] === 'function') this.audio[voice](strength)
+    else this.audio.thud(Math.min(3, impact / 6))
   }
 
   /** Kick the camera briefly. Decays in _updateCamera. */
@@ -425,6 +441,10 @@ class App {
 
       this.ui.setSpeed(this.car.speed * 3.6)
       this.audio.update(this.car.speed, this.controls.state.throttle)
+      // Tyres protest when the car is sliding rather than rolling.
+      if (this.car.slip > 0.35 && this.car.speed > 7) {
+        this.audio.screech(this.car.slip * (this.car.speed / 14))
+      }
       this.minimap.draw(this.car)
     }
 

@@ -61,6 +61,16 @@ export class Audio {
     this.noise.start()
   }
 
+  /** Switch sound on. Safe to call only from inside a user gesture. */
+  enable() {
+    this._init()
+    if (!this.ctx) return false
+    this.enabled = true
+    if (this.ctx.state === 'suspended') this.ctx.resume()
+    this.master.gain.setTargetAtTime(0.5, this.ctx.currentTime, 0.08)
+    return true
+  }
+
   toggle() {
     this._init()
     if (!this.ctx) return false
@@ -81,6 +91,158 @@ export class Audio {
     this.engineGain.gain.setTargetAtTime(0.06 + rev * 0.1 + Math.abs(throttle) * 0.05, t, 0.12)
     this.noiseGain.gain.setTargetAtTime(rev * 0.035, t, 0.15)
     this.noiseFilter.frequency.setTargetAtTime(500 + rev * 1600, t, 0.15)
+  }
+
+
+  // --- impact voices -------------------------------------------------------
+  // Everything below is synthesised: no sample files, in keeping with the rest
+  // of the project. Each material gets its own envelope and filter so a tree,
+  // a rock and a container are distinguishable without looking.
+
+  /** Shaped noise burst — the backbone of most impact sounds. */
+  _noise(t, { duration, from, to, q = 1, gain = 0.25, type = 'bandpass', curve = 2 }) {
+    const len = Math.max(1, Math.ceil(this.ctx.sampleRate * duration))
+    const buffer = this.ctx.createBuffer(1, len, this.ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+    for (let i = 0; i < len; i++) {
+      const fade = 1 - i / len
+      data[i] = (Math.random() * 2 - 1) * Math.pow(fade, curve)
+    }
+    const src = this.ctx.createBufferSource()
+    src.buffer = buffer
+    const filter = this.ctx.createBiquadFilter()
+    filter.type = type
+    filter.frequency.setValueAtTime(from, t)
+    filter.frequency.exponentialRampToValueAtTime(Math.max(40, to), t + duration)
+    filter.Q.value = q
+    const g = this.ctx.createGain()
+    g.gain.value = gain
+    src.connect(filter)
+    filter.connect(g)
+    g.connect(this.master)
+    src.start(t)
+    src.stop(t + duration + 0.02)
+    return g
+  }
+
+  /** A pitched body, for things that ring. */
+  _tone(t, { freq, endFreq = freq, duration, gain = 0.2, type = 'triangle', delay = 0 }) {
+    const at = t + delay
+    const osc = this.ctx.createOscillator()
+    const g = this.ctx.createGain()
+    osc.type = type
+    osc.frequency.setValueAtTime(freq, at)
+    if (endFreq !== freq) osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), at + duration)
+    g.gain.setValueAtTime(gain, at)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+    osc.connect(g)
+    g.connect(this.master)
+    osc.start(at)
+    osc.stop(at + duration + 0.02)
+  }
+
+  /** Dry knock: trees, crates, anything wooden. */
+  wood(intensity = 1) {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    const i = Math.min(1.6, intensity)
+    this._noise(t, { duration: 0.16, from: 1900, to: 380, q: 1.4, gain: 0.2 * i })
+    this._tone(t, { freq: 180, endFreq: 92, duration: 0.17, gain: 0.16 * i })
+  }
+
+  /** Dull, gritty, and low: rocks. */
+  stone(intensity = 1) {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    const i = Math.min(1.6, intensity)
+    this._noise(t, { duration: 0.26, from: 900, to: 140, q: 0.7, gain: 0.24 * i, curve: 1.4 })
+    this._tone(t, { freq: 92, endFreq: 48, duration: 0.3, gain: 0.2 * i, type: 'sine' })
+  }
+
+  /** A soft rustle: bushes and foliage. */
+  leaves(intensity = 1) {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    this._noise(t, { duration: 0.3, from: 5200, to: 2400, q: 0.6, gain: 0.1 * Math.min(1.4, intensity), curve: 1.1 })
+  }
+
+  /** Clang with a tail: containers, lamp posts, barrels. */
+  metal(intensity = 1) {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    const i = Math.min(1.6, intensity)
+    this._noise(t, { duration: 0.12, from: 3600, to: 900, q: 2, gain: 0.16 * i })
+    // Inharmonic partials are what make metal sound like metal.
+    for (const [f, d, g] of [[430, 0.7, 0.12], [611, 0.55, 0.09], [917, 0.4, 0.06]]) {
+      this._tone(t, { freq: f, duration: d, gain: g * i, type: 'triangle' })
+    }
+  }
+
+  /** Light tick: cones and pins. */
+  plastic(intensity = 1) {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    this._noise(t, { duration: 0.09, from: 2600, to: 1100, q: 2.2, gain: 0.14 * Math.min(1.5, intensity) })
+    this._tone(t, { freq: 640, endFreq: 300, duration: 0.1, gain: 0.1 * Math.min(1.5, intensity) })
+  }
+
+  /** Hollow pock: the football. */
+  ball(intensity = 1) {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    const i = Math.min(1.5, intensity)
+    this._tone(t, { freq: 260, endFreq: 110, duration: 0.2, gain: 0.24 * i, type: 'sine' })
+    this._noise(t, { duration: 0.08, from: 1400, to: 500, q: 1.2, gain: 0.12 * i })
+  }
+
+  /** Two-tone telephone ring, twice. */
+  ring() {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    for (const burst of [0, 0.45]) {
+      for (let i = 0; i < 9; i++) {
+        // Alternating pair, warbling the way a bell does.
+        this._tone(t, {
+          freq: i % 2 ? 440 : 480,
+          duration: 0.042,
+          gain: 0.17,
+          type: 'square',
+          delay: burst + i * 0.042,
+        })
+      }
+    }
+  }
+
+  /** Paper: a flutter of short, airy bursts. */
+  mail() {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    for (let i = 0; i < 6; i++) {
+      this._noise(t + i * 0.07, {
+        duration: 0.12,
+        from: 4200 + Math.random() * 2500,
+        to: 1600,
+        q: 0.8,
+        gain: 0.09,
+        curve: 1.2,
+      })
+    }
+  }
+
+  /** Tyre scrub, while the car is sliding. */
+  screech(intensity = 1) {
+    if (!this.enabled || !this.ctx) return
+    const now = this.ctx.currentTime
+    if (now - (this._lastScreech || 0) < 0.18) return
+    this._lastScreech = now
+    this._noise(now, {
+      duration: 0.3,
+      from: 1300,
+      to: 2100,
+      q: 6,
+      gain: 0.1 * Math.min(1.4, intensity),
+      curve: 0.8,
+    })
   }
 
   /** Short percussive hit when the car connects with a prop. */

@@ -160,7 +160,7 @@ export function ramp({ width = 6, run = 9, rise = 2.4, color = C.amber, thicknes
 /** Collision filter group for immovable world geometry. */
 export const STATIC_GROUP = 2
 
-export function boxBody({ world, size, position, mass = 0, material, quaternion }) {
+export function boxBody({ world, size, position, mass = 0, material, quaternion, sfx }) {
   const body = new CANNON.Body({
     mass,
     material,
@@ -179,12 +179,13 @@ export function boxBody({ world, size, position, mass = 0, material, quaternion 
     sleepSpeedLimit: 0.35,
     sleepTimeLimit: 0.6,
   })
+  if (sfx) body.userData = { ...(body.userData || {}), sfx }
   world.addBody(body)
   if (mass === 0) body.updateAABB()
   return body
 }
 
-export function cylinderBody({ world, radius, height, position, mass = 0, material, segments = 10 }) {
+export function cylinderBody({ world, radius, height, position, mass = 0, material, segments = 10, sfx }) {
   const body = new CANNON.Body({
     mass,
     material,
@@ -195,6 +196,7 @@ export function cylinderBody({ world, radius, height, position, mass = 0, materi
     sleepSpeedLimit: 0.35,
     sleepTimeLimit: 0.6,
   })
+  if (sfx) body.userData = { ...(body.userData || {}), sfx }
   world.addBody(body)
   if (mass === 0) body.updateAABB()
   return body
@@ -456,19 +458,24 @@ export function goalPosts({ width = 10, height = 3.4, depth = 2.6 }) {
   cross.position.y = height
   group.add(cross)
 
-  // Net: a grid of thin lines on the back and sides, cheap and readable.
-  const netMat = new THREE.MeshBasicMaterial({
-    color: 0xdce8ff, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false,
-  })
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(width, height), netMat)
+  // Solid panels rather than a translucent net: at this camera distance a
+  // see-through goal read as an empty frame and it was hard to tell whether the
+  // ball had actually gone in.
+  const netMat = std(0xe3ecfb, { roughness: 0.85, side: THREE.DoubleSide })
+  const back = meshOf(new THREE.PlaneGeometry(width, height), netMat)
   back.position.set(0, height / 2, -depth)
   group.add(back)
   for (const sx of [-1, 1]) {
-    const side = new THREE.Mesh(new THREE.PlaneGeometry(depth, height), netMat)
+    const side = meshOf(new THREE.PlaneGeometry(depth, height), netMat)
     side.rotation.y = Math.PI / 2
     side.position.set((sx * width) / 2, height / 2, -depth / 2)
     group.add(side)
   }
+  // A roof panel, so the goal reads as a box from the overhead camera.
+  const roof = meshOf(new THREE.PlaneGeometry(width, depth), netMat)
+  roof.rotation.x = Math.PI / 2
+  roof.position.set(0, height, -depth / 2)
+  group.add(roof)
   return group
 }
 

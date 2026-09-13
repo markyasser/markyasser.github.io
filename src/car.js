@@ -234,6 +234,7 @@ export class Car {
     this.airborne = false
     this.grounded = 4
     this.boost = 0
+    this.slip = 0
     this.airTime = 0
     this.stuckFor = 0
     this.stuckAnchor = null
@@ -315,6 +316,13 @@ export class Car {
       v.x *= s
       v.z *= s
     }
+
+    // How far past grip the tyres are, 0..1 — drives the screech.
+    let slipping = 0
+    for (const wheel of this.vehicle.wheelInfos) {
+      if (wheel.sliding) slipping += 1 - Math.min(1, wheel.skidInfo)
+    }
+    this.slip = Math.min(1, slipping / 2 + (input.handbrake && this.speed > 6 ? 0.5 : 0))
 
     this.tailMat.emissiveIntensity = this.braking ? 2.6 : 0.6
 

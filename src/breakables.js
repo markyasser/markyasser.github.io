@@ -112,7 +112,7 @@ export class Breakables {
    * `breakAt` is the impact speed in m/s that destroys it; omit for things that
    * should only ever be shoved around.
    */
-  add({ parts, shape, mass, position, rotY = 0, breakAt = Infinity, chunkColor, chunks = 5, chunkSize = 0.3 }) {
+  add({ parts, shape, mass, position, rotY = 0, breakAt = Infinity, chunkColor, chunks = 5, chunkSize = 0.3, sfx }) {
     const body = new CANNON.Body({
       mass,
       material: this.material,
@@ -125,6 +125,9 @@ export class Breakables {
       angularDamping: 0.32,
       linearDamping: 0.02,
     })
+    // The impact voice travels on the body, so the collision handler can pick
+    // the right sound without another lookup table.
+    if (sfx) body.userData = { ...(body.userData || {}), sfx }
     this.world.addBody(body)
     body.updateAABB()
 

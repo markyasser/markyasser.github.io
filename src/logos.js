@@ -1,4 +1,6 @@
 import prepitLogo from './assets/prepit-logo.js'
+import cairoLogo from './assets/cairo-logo.js'
+import engineeringLogo from './assets/engineering-logo.js'
 
 // ---------------------------------------------------------------------------
 // Logo marks, drawn as vector paths at runtime.
@@ -732,8 +734,8 @@ Object.assign(ORG_MARKS, {
 
 export const IMAGE_MARKS = {
   prepit: prepitLogo,
-  // cairo: 'data:image/png;base64,...',
-  // engineering: 'data:image/png;base64,...',
+  cairo: cairoLogo,
+  engineering: engineeringLogo,
 }
 
 const loadedImages = new Map()

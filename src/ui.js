@@ -61,11 +61,7 @@ export class UI {
     document.getElementById('btn-camera').addEventListener('click', () => onCamera())
 
     this.soundBtn = document.getElementById('btn-sound')
-    this.soundBtn.addEventListener('click', () => {
-      const on = onToggleSound()
-      this.soundBtn.classList.toggle('off', !on)
-      this.soundBtn.textContent = on ? '🔊' : '🔈'
-    })
+    this.soundBtn.addEventListener('click', () => this.setSound(onToggleSound()))
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -185,6 +181,12 @@ export class UI {
         <div class="r-sub">${esc(EDUCATION.degree)} — ${esc(EDUCATION.grade)}</div>
       </div>
     </article>`
+  }
+
+  setSound(on) {
+    this.soundBtn.classList.toggle('off', !on)
+    this.soundBtn.textContent = on ? '🔊' : '🔈'
+    this.soundBtn.title = on ? 'Mute' : 'Unmute'
   }
 
   // ------------------------------------------------------------ loading
