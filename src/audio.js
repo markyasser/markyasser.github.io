@@ -132,6 +132,29 @@ export class Audio {
     this.thud(intensity * 1.6)
   }
 
+  /** A short fanfare, for a goal. */
+  fanfare() {
+    if (!this.enabled || !this.ctx) return
+    const t = this.ctx.currentTime
+    const notes = [523.25, 659.25, 783.99, 1046.5]
+    notes.forEach((f, i) => {
+      const osc = this.ctx.createOscillator()
+      const gain = this.ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.value = f
+      const at = t + i * 0.11
+      gain.gain.setValueAtTime(0, at)
+      gain.gain.linearRampToValueAtTime(0.19, at + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.55)
+      osc.connect(gain)
+      gain.connect(this.master)
+      osc.start(at)
+      osc.stop(at + 0.6)
+    })
+    // Crackle under the melody, as the shells go up.
+    for (let i = 0; i < 3; i++) setTimeout(() => this.crack(0.7), 120 + i * 340)
+  }
+
   /** Nitrous: a rising hiss with a thump under it. */
   whoosh() {
     if (!this.enabled || !this.ctx) return

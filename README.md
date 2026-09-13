@@ -19,7 +19,7 @@ marking is drawn into a canvas at runtime, so the entire site is one JS bundle.
 | West | Cairo University | Degree, honours, and a graduation cap you can knock off the roof |
 | South | Contact | GitHub, LinkedIn and email containers |
 | North-east | Stunt park | Ramps, barrels, bowling pins |
-| West | Kick-about | A football and a goal |
+| West | Kick-about | A football, a goal, and fireworks when it goes in |
 
 Ten glowing shards line the routes through the experience avenue and the skills
 yard; each one reveals a fact about the work. They sit on the way *into* the
@@ -36,7 +36,7 @@ into pieces when hit hard enough.
 - **Scroll**, pinch, or **+** / **&minus;** to zoom the camera out over the map
 - **E** or **Enter** opens whatever you are parked next to
 - **R** resets the car, **C** cycles the camera (follow / overhead / chase)
-- **Shift** burns a nitro charge: roughly double the drive force and a 34 m/s
+- **Shift** burns a nitro charge: roughly double the drive force and a 42 m/s
   ceiling for a couple of seconds, which is what the stunt ramps want
 - Gamepad: left stick and triggers
 - Touch: on-screen pads appear automatically
@@ -207,6 +207,12 @@ A few things are load-bearing and easy to break:
   dead instead of scattering.
 - **`updateWheelTransform` clears cannon's `isInContact` flags**, so the car
   reads its grounded state in `sync()` before touching the wheels.
+- **The air-levelling correction has an unstable equilibrium at 180 degrees.**
+  It steers on `up x worldUp`, whose length is `sin(tilt)` — which is zero both
+  upright *and* exactly inverted, so a car on its roof mid-air gets no
+  correction at all. `_stabilise` rescales the axis by the true angle. Raising
+  the gains instead makes it worse: the car overshoots level and lands in the
+  inverted basin.
 - **`applyForce`'s second argument is a point relative to the centre of mass**,
   not a world position. Passing a world position turns a straight-line force
   into a torque with a lever arm as long as the car's distance from the origin,

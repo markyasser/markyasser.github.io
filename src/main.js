@@ -13,6 +13,7 @@ import { Controls } from './controls.js'
 import { UI } from './ui.js'
 import { Minimap } from './minimap.js'
 import { Audio } from './audio.js'
+import { Fireworks } from './fireworks.js'
 import { SHARD_FACTS } from './data.js'
 
 const FIXED_STEP = 1 / 60
@@ -231,6 +232,7 @@ class App {
     this.car.chassisBody.addEventListener('collide', (e) => this._onCollide(e))
 
     await step(0.84, 'Warming the engine…')
+    this.fireworks = new Fireworks(this.scene)
     this.minimap = new Minimap(document.getElementById('minimap'), { shards: this.worldRefs.shards })
     this.ui.setShards(0, this.worldRefs.shards.length)
     this.nitro = 0
@@ -428,6 +430,7 @@ class App {
 
     this._updateCamera(dt)
     this.worldRefs.update(dt, this.elapsed, this.camera)
+    if (this.fireworks) this.fireworks.update(dt)
     this._followSun()
     this._adaptQuality(dt)
 
@@ -606,6 +609,8 @@ class App {
       fb.scored += 1
       this.ui.toast(`⚽ GOAL! That's ${fb.scored}.`, 3200)
       this.audio.chime()
+      this.fireworks.celebrate(new THREE.Vector3(g.x, 2, g.z))
+      this.audio.fanfare()
       this.worldRefs.resetBall()
       return
     }

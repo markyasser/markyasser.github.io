@@ -7,26 +7,28 @@ const UP = new THREE.Vector3(0, 1, 0)
 
 // Air-levelling gains: proportional pull towards level, and damping on the
 // tumble rate so the correction settles instead of overshooting.
-const LEVEL_P = 5
-const LEVEL_D = 2.4
+// Damping does most of the work: it kills a tumble without the overshoot a
+// large proportional term causes, which was flipping the car past level.
+const LEVEL_P = 5.5
+const LEVEL_D = 4.6
 
 // Roll resistance on the ground. Enough to stop a slide tipping the car over,
 // gentle enough that a deliberate stunt still looks like one.
-const ROLL_P = 9
-const ROLL_D = 3.5
+const ROLL_P = 12
+const ROLL_D = 4.2
 
 // Chassis dimensions (metres). Forward is +Z, right is +X, up is +Y.
 const BODY = { w: 1.86, h: 0.54, l: 4.0 }
-const WHEEL = { radius: 0.44, width: 0.36 }
+const WHEEL = { radius: 0.56, width: 0.46 }
 const AXLE_Z = 1.38
-const AXLE_X = 0.92
+const AXLE_X = 0.96
 
 const MAX_STEER = 0.52
 const BOOST_SECONDS = 2.6
 const BOOST_FORCE = 2.1
-const BOOST_TOP = 34
-const ENGINE_FORCE = 560
-const REVERSE_FORCE = 300
+const BOOST_TOP = 42
+const ENGINE_FORCE = 660
+const REVERSE_FORCE = 340
 const BRAKE_FORCE = 34
 const HANDBRAKE_FORCE = 120
 const GRIP = 3.6
@@ -192,7 +194,7 @@ export class Car {
       radius: WHEEL.radius,
       directionLocal: new CANNON.Vec3(0, -1, 0),
       suspensionStiffness: 44,
-      suspensionRestLength: 0.48,
+      suspensionRestLength: 0.42,
       frictionSlip: GRIP,
       dampingRelaxation: 2.8,
       dampingCompression: 4.7,
@@ -307,7 +309,7 @@ export class Car {
     }
 
     // Soft top-speed limiter, lifted while the nitrous burns.
-    const max = boosting ? BOOST_TOP : 21
+    const max = boosting ? BOOST_TOP : 26
     if (this.speed > max) {
       const s = max / this.speed
       v.x *= s
@@ -339,7 +341,7 @@ export class Car {
     // the car is properly airborne; applied on every little bump it pumps spin
     // into the chassis instead of taking it out.
     this.airTime = this.airborne ? this.airTime + dt : 0
-    if (this.airTime > 0.15) this._stabilise(dt)
+    if (this.airTime > 0.1) this._stabilise(dt)
     else if (grounded > 0) this._resistRoll(dt)
   }
 
@@ -373,6 +375,17 @@ export class Car {
     // Rotating the car's up vector back onto the world's. The cross product has
     // no yaw component, so this never fights the heading the player chose.
     const axis = this._axis.crossVectors(up, UP)
+
+    // The cross product's length is sin(tilt), which peaks at 90 degrees and
+    // falls back to zero when the car is exactly inverted — an unstable
+    // equilibrium that can leave a car stuck on its roof mid-air, getting no
+    // correction at all. Rescaling by the true angle keeps the pull growing all
+    // the way round.
+    const sin = axis.length()
+    if (sin > 1e-5) {
+      const angle = Math.atan2(sin, up.y)
+      axis.multiplyScalar(angle / (Math.PI / 2) / sin)
+    }
 
     // Spring towards level, damped by the current tumble rate. A plain
     // proportional push accumulates: it keeps adding rotation every frame and

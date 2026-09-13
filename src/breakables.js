@@ -16,9 +16,9 @@ import { STATIC_GROUP } from './props.js'
 const DEBRIS_POOL = 110
 const DEBRIS_LIFE = 5.5
 const PARKED = new THREE.Vector3(0, -500, 0)
-// The crate material's resting emissive, restored once a flash decays.
-const BASE_EMISSIVE = 0.12
-const FLASH_SECONDS = 0.9
+// Skill-crate cards: how many can be in flight, and for how long.
+const CARD_POOL = 14
+const CARD_SECONDS = 1.25
 
 const scratchMatrix = new THREE.Matrix4()
 const scratchBody = new THREE.Matrix4()
@@ -93,6 +93,7 @@ export class Breakables {
     this.dirtyPools = new Set()
 
     this._buildDebrisPool()
+    this._buildCardPool()
   }
 
   // ------------------------------------------------------------- part pools
@@ -142,10 +143,10 @@ export class Breakables {
   }
 
   /** Register something built elsewhere (a crate, a barrel) as breakable. */
-  adopt(body, mesh, { breakAt, chunkColor, chunks = 6, chunkSize = 0.32, flashable = false }) {
+  adopt(body, mesh, { breakAt, chunkColor, chunks = 6, chunkSize = 0.32, cardTexture = null }) {
     const item = {
       body, mesh, parts: [], breakAt, chunkColor, chunks, chunkSize,
-      flashable, flash: 0, broken: false, dead: false,
+      cardTexture, broken: false, dead: false,
     }
     this.items.push(item)
     this.byBody.set(body, item)
@@ -153,19 +154,26 @@ export class Breakables {
   }
 
   /**
-   * Light a prop up and set it spinning when the car clips it without breaking
-   * it. On the skill crates this is what makes the logo legible: struck square
-   * on, a crate would otherwise slide away still face-down.
+   * Release the prop's face as a card that flies up, spins and fades — the
+   * language of collecting something. On the skill crates this is the whole
+   * point of the hit: the crate itself is gone in a frame, so without this the
+   * logo would never be seen.
    */
-  flash(body) {
-    const item = this.byBody.get(body)
-    if (!item || !item.flashable || item.dead) return
-    item.flash = FLASH_SECONDS
-    const b = item.body
-    b.wakeUp()
-    b.angularVelocity.x += (Math.random() - 0.5) * 9
-    b.angularVelocity.y += (Math.random() - 0.5) * 9
-    b.angularVelocity.z += (Math.random() - 0.5) * 9
+  _releaseCard(item) {
+    if (!item.cardTexture) return
+    const card = this.cards.find((c) => c.life <= 0)
+    if (!card) return
+    const p = item.body.position
+    card.mesh.material.map = item.cardTexture
+    card.mesh.material.needsUpdate = true
+    card.mesh.material.opacity = 1
+    card.mesh.visible = true
+    card.mesh.position.set(p.x, p.y + 0.4, p.z)
+    card.mesh.rotation.set(0, Math.random() * Math.PI * 2, 0)
+    card.spin = 3.2 + Math.random() * 2.4
+    card.rise = 3.4 + Math.random() * 1.2
+    card.drift.set((Math.random() - 0.5) * 1.6, 0, (Math.random() - 0.5) * 1.6)
+    card.life = CARD_SECONDS
   }
 
   // ---------------------------------------------------------------- impacts
@@ -176,10 +184,7 @@ export class Breakables {
   impact(body, speed) {
     const item = this.byBody.get(body)
     if (!item || item.broken) return null
-    if (speed < item.breakAt) {
-      this.flash(body)
-      return { broke: false, item }
-    }
+    if (speed < item.breakAt) return { broke: false, item }
     // Flagged now so repeat contacts in the same step don't queue it twice; the
     // work happens in update(), once the step has finished.
     item.broken = true
@@ -194,6 +199,7 @@ export class Breakables {
     const p = item.body.position
     const origin = new THREE.Vector3(p.x, p.y, p.z)
     this._burst(origin, item.chunks, item.chunkSize, item.chunkColor, speed)
+    this._releaseCard(item)
 
     // Hide the instanced parts, then retire the body.
     for (const part of item.parts) {
@@ -252,6 +258,44 @@ export class Breakables {
   /** Public burst, for impacts against things that don't themselves break. */
   puff(origin, { count = 5, size = 0.5, color = 0xd8d2c4, speed = 4 } = {}) {
     this._burst(origin, count, size, color, speed)
+  }
+
+  _buildCardPool() {
+    // Each card shows a different texture, so these cannot be instanced. Only a
+    // few are ever in flight, and they are hidden the rest of the time.
+    this.cards = []
+    const geometry = new THREE.PlaneGeometry(2.1, 2.1)
+    for (let i = 0; i < CARD_POOL; i++) {
+      const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({
+          transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
+        })
+      )
+      mesh.visible = false
+      mesh.renderOrder = 6
+      this.scene.add(mesh)
+      this.cards.push({ mesh, life: 0, spin: 0, rise: 0, drift: new THREE.Vector3() })
+    }
+  }
+
+  _updateCards(dt) {
+    for (const card of this.cards) {
+      if (card.life <= 0) continue
+      card.life -= dt
+      if (card.life <= 0) {
+        card.mesh.visible = false
+        continue
+      }
+      const t = 1 - card.life / CARD_SECONDS
+      card.mesh.position.y += card.rise * dt
+      card.mesh.position.x += card.drift.x * dt
+      card.mesh.position.z += card.drift.z * dt
+      card.mesh.rotation.y += card.spin * dt
+      // Swell, then fade out over the back half of the flight.
+      card.mesh.scale.setScalar(0.7 + t * 0.9)
+      card.mesh.material.opacity = t < 0.45 ? 1 : 1 - (t - 0.45) / 0.55
+    }
   }
 
   _burst(origin, count, size, color, speed) {
@@ -328,22 +372,7 @@ export class Breakables {
     for (const pool of this.dirtyPools) pool.flush()
     this.dirtyPools.clear()
 
-    // Decay any flashes: a strobe on the emissive plus a scale pop, so a
-    // struck crate announces its logo instead of quietly sliding away.
-    for (const item of this.items) {
-      if (!item.flash || item.dead) continue
-      item.flash = Math.max(0, item.flash - dt)
-      const t = item.flash / FLASH_SECONDS
-      const strobe = t > 0 ? (Math.sin(item.flash * 38) * 0.5 + 0.5) * t : 0
-
-      const mats = Array.isArray(item.mesh.material) ? item.mesh.material : [item.mesh.material]
-      for (const m of mats) {
-        if (m.emissiveIntensity === undefined) continue
-        m.emissiveIntensity = BASE_EMISSIVE + strobe * 3.2
-      }
-      const pop = 1 + t * 0.28
-      item.mesh.scale.setScalar(pop)
-    }
+    this._updateCards(dt)
 
     let debrisDirty = false
     for (const piece of this.debris) {

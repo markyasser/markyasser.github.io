@@ -33,7 +33,7 @@ export const EXPERIENCE = [
     role: 'Software Engineer',
     period: 'Mar 2025 — Present',
     place: 'Cairo, Egypt',
-    accent: 0xef6f5c,
+    accent: 0x14b2b6,
     floors: 5,
     bullets: [
       'Co-designed and executed the migration from a monolithic platform to a distributed architecture of 10 independently deployable microservices — defining service boundaries, migration strategy, and core architectural decisions to improve scalability, maintainability, and engineering velocity.',
@@ -51,6 +51,9 @@ export const EXPERIENCE = [
     id: 'cairo-ta',
     company: 'Faculty of Engineering, Cairo University',
     logo: 'cairo',
+    // Built at the university rather than on the experience avenue — it is the
+    // same place as the degree, and reads better standing next to it.
+    campus: true,
     role: 'Teaching Assistant',
     period: 'Feb 2025 — May 2025',
     place: 'Cairo, Egypt',

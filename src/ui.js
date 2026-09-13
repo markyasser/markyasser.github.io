@@ -433,14 +433,14 @@ export class UI {
         <ul>
           <li>Ten <b>◆ shards</b> along the experience avenue and the skills yard, each a fact about the work</li>
           <li><b>⚡ Nitro</b> canisters, mostly on the run out to the stunt park. They come back after a while</li>
-          <li>A <b>football</b> and a goal out west. Nudge it in</li>
+          <li>A <b>football</b> and a goal out west. Nudge it in — there are fireworks</li>
           <li>A <b>phone box</b> and a <b>post box</b> at the contact plaza — drive into either one</li>
         </ul>
         <h4>Everything is solid</h4>
         <p>Trees, rocks, lamps, barrels and containers can all be shoved and
         knocked over, and most of them break apart if you hit them hard enough.
-        Clip a skill crate and it lights up and tumbles so you can read its logo;
-        only a full-speed charge destroys one. Nothing you wreck matters.</p>
+        Hit a skill crate and it bursts, throwing its logo up to spin away like
+        something collected. Nothing you wreck matters.</p>
         <h4>Not here to play?</h4>
         <p>The <b>CV</b> button in the top bar shows the whole résumé as plain, selectable, printable text.</p>`,
     })

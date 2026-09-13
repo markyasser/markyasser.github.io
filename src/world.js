@@ -145,7 +145,8 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
 
   // ---------------------------------------------------------- experience
   const streetZ = [-26, -46, -66]
-  EXPERIENCE.forEach((job, i) => {
+  const avenueJobs = EXPERIENCE.filter((job) => !job.campus)
+  avenueJobs.forEach((job, i) => {
     const side = i % 2 === 0 ? -1 : 1
     buildCompany(job, { x: side * 12, z: streetZ[i], facing: side === -1 ? 1 : -1 })
   })
@@ -445,20 +446,18 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
           world,
           size: { x: size, y: size, z: size },
           position: pos,
-          // Light, because they no longer shatter on contact: a heavier crate
-          // that survives the hit just piles up and stops the car dead.
-          mass: 1.5,
+          mass: 1.8,
           material: materials.prop,
           quaternion: new CANNON.Quaternion().setFromEuler(0, mesh.rotation.y, 0),
         })
         body.angularDamping = 0.18
         dynamics.push({ mesh, body })
-        // Skill crates take a lot to destroy. At the old threshold any normal
-        // approach shattered them instantly, so the logo never got a chance to
-        // be read — the point of hitting one is that it lights up and tumbles.
-        // Only a deliberate full-speed charge breaks them now.
+        // Hitting a crate destroys it and releases its face as a card that
+        // flies up and spins away — the logo gets its moment on the way out,
+        // which a crate sliding off face-down never gave it.
         breakables.adopt(body, mesh, {
-          breakAt: 16, chunkColor: group.color, chunks: 7, chunkSize: 0.8, flashable: true,
+          breakAt: 4, chunkColor: group.color, chunks: 6, chunkSize: 0.7,
+          cardTexture: mesh.material.map,
         })
       })
     })
@@ -513,15 +512,17 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     })
 
     // A clock tower beside the hall, sharing its low-centre-of-mass trick.
-    const tower = P.clockTower({ height: 13, width: 3 })
+    // Kept under the hall's own height: a tower that out-scales the building
+    // it belongs to reads as a separate landmark.
+    const tower = P.clockTower({ height: 8.5, width: 2.1 })
     const th = tower.userData.half
-    tower.position.set(cx - 9, 0, cz + 7)
+    tower.position.set(cx - 8, 0, cz + 7)
     root.add(tower)
     const towerComY = 0.5
     const towerBody = new CANNON.Body({
-      mass: 320,
+      mass: 200,
       material: materials.prop,
-      position: new CANNON.Vec3(cx - 9, towerComY, cz + 7),
+      position: new CANNON.Vec3(cx - 8, towerComY, cz + 7),
       angularDamping: 0.9,
       linearDamping: 0.15,
       allowSleep: true,
@@ -535,7 +536,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     world.addBody(towerBody)
     towerBody.updateAABB()
     dynamics.push({ mesh: tower, body: towerBody, yOffset: -towerComY })
-    obstacles.push({ x: cx - 9, z: cz + 7, r: 6 })
+    obstacles.push({ x: cx - 8, z: cz + 7, r: 5 })
 
     // The graduation cap sits on the ground beside the honours container now,
     // where it can be knocked about. It is never registered as breakable — a
@@ -572,7 +573,37 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       height: 7.4, bannerW: 4.6, bannerH: 2.9,
     })
 
-    buildLanguages(cx, cz + 19)
+    // The teaching-assistant role belongs here, not on the experience avenue:
+    // it is the same faculty as the degree.
+    const ta = EXPERIENCE.find((job) => job.campus)
+    if (ta) {
+      const taMain = addContainer({
+        x: cx + 3, z: cz + 11, rotY: 0, length: 12, height: 3, width: 3, mass: 150,
+        title: ta.role,
+        meta: ta.period,
+        org: ta.logo,
+        items: ta.tags,
+        marks: true,
+        color: ta.accent,
+        accent: C.navy,
+      })
+      addPOI({
+        id: ta.id,
+        kind: 'job',
+        data: ta,
+        position: new THREE.Vector3(cx + 3, 1, cz + 17),
+        follow: taMain.body,
+        followOffset: new THREE.Vector3(0, 0, 6),
+        radius: 10,
+        title: ta.role,
+      })
+      addLabel('TEACHING ASSISTANT', new THREE.Vector3(cx + 3, 8, cz + 11), {
+        height: 0.85,
+        bg: `rgba(${hexToRgb(ta.accent)},0.95)`,
+      })
+    }
+
+    buildLanguages(cx, cz + 22)
 
     addPOI({
       id: 'education',
@@ -699,12 +730,12 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     // The big kicker is aimed straight down the approach road, so the whole
     // diagonal spur doubles as its run-up.
     const DIAG = Math.PI / 4
-    placeRamp(cx - 9, cz + 9, DIAG, { width: 11, run: 17, rise: 2.9, color: C.coral })
+    placeRamp(cx - 9, cz + 9, DIAG, { width: 11, run: 18, rise: 2.5, color: C.coral })
     // Landing ramp on the far side of the gap.
     placeRamp(cx + 13, cz - 13, DIAG - Math.PI, { width: 11, run: 15, rise: 2.3, color: C.coral })
     // Two free-play ramps with clear, open approaches across the plaza.
-    placeRamp(cx, cz + 18, Math.PI / 2, { width: 9, run: 13, rise: 2.1, color: C.amber })
-    placeRamp(cx - 2, cz - 18, -Math.PI / 2, { width: 9, run: 13, rise: 2.1, color: C.teal })
+    placeRamp(cx, cz + 18, Math.PI / 2, { width: 9, run: 14, rise: 1.9, color: C.amber })
+    placeRamp(cx - 2, cz - 18, -Math.PI / 2, { width: 9, run: 14, rise: 1.9, color: C.teal })
 
     // Bowling lane: ten pins in a triangle.
     let n = 0

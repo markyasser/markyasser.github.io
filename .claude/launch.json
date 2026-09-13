@@ -4,8 +4,8 @@
     {
       "name": "portfolio",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--port", "5173", "--strictPort", "."],
-      "port": 5173
+      "runtimeArgs": ["vite", "--port", "5188", "--strictPort", "."],
+      "port": 5188
     },
     {
       "name": "portfolio-prod",
