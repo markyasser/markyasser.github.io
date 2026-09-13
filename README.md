@@ -32,12 +32,32 @@ pieces.
 - **W A S D** or arrow keys to drive, **Space** for the handbrake
 - **Scroll**, pinch, or **+** / **&minus;** to zoom the camera out over the map
 - **E** or **Enter** opens whatever you are parked next to
-- **R** resets the car, **C** cycles the camera
+- **R** resets the car, **C** cycles the camera (follow / overhead / chase)
 - Gamepad: left stick and triggers
 - Touch: on-screen pads appear automatically
 
 Anyone who would rather not play can hit **CV** in the top bar for the whole
 résumé as plain, selectable, printable text.
+
+## The camera
+
+The default camera deliberately does **not** sit behind the car. A chase camera
+swings round as the car turns, which spins the world around a stationary
+vehicle — the third-person-shooter feel. This one holds a fixed angle on the
+world and only tracks the car's position, so the map stays still and the car
+drives around inside it. That is what makes the scene read as a place rather
+than a corridor, and it is the model Bruno Simon's portfolio uses.
+
+Two consequences fall out of that choice, both handled in code:
+
+- The player cannot swing the view around an obstacle, so any structure that
+  ends up between the camera and the car fades out instead (`registerOccluder`
+  in `world.js`). Arches, buildings and the name sign all do this.
+- The framing leads along the car's velocity rather than its heading, so you
+  see where you are going without the view ever rotating.
+
+Press **C** for an overhead view, or a conventional chase camera if you prefer
+it. Scroll or pinch to zoom; the setting is remembered.
 
 ## Running it
 

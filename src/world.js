@@ -18,6 +18,27 @@ const ROAD_W = 11
 const LABEL_FADE_NEAR = 6
 const LABEL_FADE_FAR = 13
 
+// How far a structure fades when it blocks the view.
+const OCCLUDED_OPACITY = 0.18
+
+let windowGeometry = null
+function WINDOW_GEO() {
+  if (!windowGeometry) windowGeometry = new THREE.BoxGeometry(1.5, 1.15, 0.18)
+  return windowGeometry
+}
+
+// A fresh material per building: the occlusion fade clones and dims it, and a
+// shared one would dim every building at once.
+function windowMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: 0x8fd2e8,
+    emissive: 0x2b6d86,
+    emissiveIntensity: 0.45,
+    roughness: 0.25,
+    metalness: 0.3,
+  })
+}
+
 // Deterministic RNG so the scenery is identical on every load — the layout is
 // part of the design, not something that should shuffle between visits.
 function mulberry32(seed) {
@@ -49,8 +70,9 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
   const animated = []
   // Footprints that scenery must not spawn inside.
   const obstacles = []
-  // Window placements, batched into one instanced mesh after the buildings exist.
-  const windowSlots = []
+  // Solid structures that should fade when they come between camera and car.
+  const occluders = new Map()
+  const occluderEntries = []
   const root = new THREE.Group()
   scene.add(root)
 
@@ -145,7 +167,6 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     buildCompany(job, { x: side * 19, z: streetZ[i], facing: side === -1 ? 1 : -1 })
   })
   buildStatsPlaza()
-  buildWindows()
 
   // -------------------------------------------------------------- skills
   buildSkillYard()
@@ -184,8 +205,58 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
 
   function staticBox(mesh, size, position, rotationY = 0) {
     const q = new CANNON.Quaternion().setFromEuler(0, rotationY, 0)
-    P.boxBody({ world, size, position, mass: 0, material: materials.ground, quaternion: q })
-    return mesh
+    return P.boxBody({ world, size, position, mass: 0, material: materials.ground, quaternion: q })
+  }
+
+  /**
+   * Mark a structure as something to fade out when it stands between the camera
+   * and the car. With a fixed-angle camera the player cannot swing the view
+   * around an obstacle, so anything solid has to get out of the way itself.
+   *
+   * Materials are cloned per structure: they are shared by default, and fading
+   * a shared material would dim every building in the world at once. A
+   * structure with several bodies (an arch has two legs and a beam) shares one
+   * entry, so whichever the camera ray strikes fades the whole thing.
+   */
+  function registerOccluder(bodies, group) {
+    const entry = { meshes: [], bodies: new Set(), fade: 1, applied: 1 }
+    group.traverse((node) => {
+      if (!node.isMesh) return
+      node.material = Array.isArray(node.material)
+        ? node.material.map((m) => m.clone())
+        : node.material.clone()
+      entry.meshes.push(node)
+    })
+    if (!entry.meshes.length) return
+    for (const body of [].concat(bodies)) {
+      entry.bodies.add(body)
+      occluders.set(body, entry)
+    }
+    occluderEntries.push(entry)
+  }
+
+  /**
+   * `hitBody` is whatever the camera ray struck this frame, or null. Everything
+   * it did not strike eases back to fully opaque.
+   */
+  function updateOcclusion(hitBody, dt) {
+    for (const entry of occluderEntries) {
+      const target = entry.bodies.has(hitBody) ? OCCLUDED_OPACITY : 1
+      entry.fade = THREE.MathUtils.damp(entry.fade, target, 9, dt)
+      if (Math.abs(entry.fade - target) < 0.01) entry.fade = target
+      if (Math.abs(entry.fade - entry.applied) < 0.004) continue
+      entry.applied = entry.fade
+
+      for (const mesh of entry.meshes) {
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        for (const m of mats) {
+          m.opacity = entry.fade
+          // Staying in the opaque pass while solid avoids sorting artefacts.
+          m.transparent = entry.fade < 0.995
+          m.depthWrite = entry.fade > 0.6
+        }
+      }
+    }
   }
 
   /** A painted disc on the ground marking where a landmark opens. */
@@ -227,7 +298,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     })
     hero.position.set(0, 0, -11)
     root.add(hero)
-    staticBox(hero, { x: 17, y: 8.5, z: 1 }, { x: 0, y: 7.25, z: -11 })
+    registerOccluder(staticBox(hero, { x: 17, y: 8.5, z: 1 }, { x: 0, y: 7.25, z: -11 }), hero)
 
     // Plaza kerb, broken into four arcs so the roads pass through cleanly.
     for (let i = 0; i < 4; i++) {
@@ -299,20 +370,33 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const legGeo = new RoundedBoxGeometry(1.5, height, 1.5, 3, 0.2)
     const cos = Math.cos(rotY)
     const sin = Math.sin(rotY)
+    const legBodies = []
     for (const lx of [-width / 2, width / 2]) {
       const leg = P.meshOf(legGeo, P.std(color))
       leg.position.set(lx, height / 2, 0)
       g.add(leg)
-      P.boxBody({
+      legBodies.push(P.boxBody({
         world,
         size: { x: 1.6, y: height, z: 1.6 },
         position: { x: x + lx * cos, y: height / 2, z: z - lx * sin },
         mass: 0,
         material: materials.ground,
         quaternion: new CANNON.Quaternion().setFromEuler(0, rotY, 0),
-      })
+      }))
       obstacles.push({ x: x + lx * cos, z: z - lx * sin, r: 5 })
     }
+
+    // The beam across the road blocks the view long before a leg does, so it
+    // needs a body of its own for the camera ray to find. It sits well above
+    // the road, so it only ever matters to a car that is already airborne.
+    const beamBody = P.boxBody({
+      world,
+      size: { x: width + 2.4, y: 2.4, z: 1.8 },
+      position: { x, y: height + 0.6, z },
+      mass: 0,
+      material: materials.ground,
+      quaternion: new CANNON.Quaternion().setFromEuler(0, rotY, 0),
+    })
 
     const beam = P.meshOf(new RoundedBoxGeometry(width + 2.4, 1.9, 1.6, 3, 0.2), P.std(color))
     beam.position.y = height + 0.6
@@ -331,30 +415,11 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       back.rotation.y = Math.PI
       g.add(back)
     }
-    return g
-  }
 
-  /** One instanced mesh for every office window in the world. */
-  function buildWindows() {
-    if (!windowSlots.length) return
-    const geometry = new THREE.BoxGeometry(1.5, 1.15, 0.18)
-    const material = P.std(0x8fd2e8, {
-      emissive: 0x2b6d86, emissiveIntensity: 0.45, roughness: 0.25, metalness: 0.3,
-    })
-    const mesh = new THREE.InstancedMesh(geometry, material, windowSlots.length)
-    mesh.castShadow = false
-    mesh.receiveShadow = true
-    const m = new THREE.Matrix4()
-    const world = new THREE.Vector3()
-    windowSlots.forEach((slot, i) => {
-      slot.group.updateMatrixWorld(true)
-      world.copy(slot.local).applyMatrix4(slot.group.matrixWorld)
-      m.makeRotationFromEuler(slot.group.rotation)
-      m.setPosition(world)
-      mesh.setMatrixAt(i, m)
-    })
-    mesh.instanceMatrix.needsUpdate = true
-    root.add(mesh)
+    // Registered last: the registry snapshots the group's meshes, so every part
+    // of the arch has to exist before this runs.
+    registerOccluder([...legBodies, beamBody], g)
+    return g
   }
 
   // --- Experience --------------------------------------------------------
@@ -381,19 +446,29 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     plinth.position.y = 0.27
     g.add(plinth)
 
-    // Windows: collected here, then emitted as a single instanced mesh once
-    // every building is known.
+    // Windows as one instanced mesh per building. Instancing keeps the draw
+    // calls down; keeping it inside the building's own group means the
+    // occlusion fade takes the windows with it instead of leaving them hanging
+    // in mid-air when the wall goes transparent.
+    const winSlots = []
     for (let f = 0; f < job.floors; f++) {
       for (let c = 0; c < 4; c++) {
         if (f === 0 && (c === 1 || c === 2)) continue // leave room for the door
         for (const zz of [d / 2 + 0.02, -d / 2 - 0.02]) {
-          windowSlots.push({
-            group: g,
-            local: new THREE.Vector3(-w / 2 + 2.2 + c * 2.7, 1.9 + f * 2.7, zz),
-          })
+          winSlots.push(new THREE.Vector3(-w / 2 + 2.2 + c * 2.7, 1.9 + f * 2.7, zz))
         }
       }
     }
+    const windows = new THREE.InstancedMesh(WINDOW_GEO(), windowMaterial(), winSlots.length)
+    windows.castShadow = false
+    windows.receiveShadow = true
+    const wm = new THREE.Matrix4()
+    winSlots.forEach((local, i) => {
+      wm.makeTranslation(local.x, local.y, local.z)
+      windows.setMatrixAt(i, wm)
+    })
+    windows.instanceMatrix.needsUpdate = true
+    g.add(windows)
 
     // Entrance.
     const door = P.meshOf(new RoundedBoxGeometry(3.4, 3.0, 0.3, 3, 0.1), P.std(C.navy))
@@ -431,7 +506,10 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     lampA.rotation.y = Math.PI
     g.add(lampA)
 
-    staticBox(tower, { x: w + 2, y: h, z: d + 2 }, { x, y: h / 2, z }, g.rotation.y)
+    registerOccluder(
+      staticBox(tower, { x: w + 2, y: h, z: d + 2 }, { x, y: h / 2, z }, g.rotation.y),
+      g
+    )
     obstacles.push({ x, z, r: 16 })
 
     addPOI({
@@ -642,7 +720,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     sign.position.set(0, 0, 14)
     g.add(sign)
 
-    staticBox(hall, { x: 26, y: 9, z: 18 }, { x: cx, y: 4.5, z: cz }, g.rotation.y)
+    registerOccluder(staticBox(hall, { x: 26, y: 9, z: 18 }, { x: cx, y: 4.5, z: cz }, g.rotation.y), g)
     obstacles.push({ x: cx, z: cz, r: 26 })
 
     addPOI({
@@ -1107,7 +1185,15 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     }
   }
 
-  return { root, pois, shards, dynamics, breakables, update, syncDynamics, ground }
+  /** True when this body belongs to a structure that fades rather than blocks. */
+  function canFade(body) {
+    return occluders.has(body)
+  }
+
+  return {
+    root, pois, shards, dynamics, breakables, ground,
+    update, syncDynamics, updateOcclusion, canFade,
+  }
 }
 
 function hexToRgb(n) {

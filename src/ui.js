@@ -371,7 +371,8 @@ export class UI {
         <ul>
           <li><b>W / ↑</b> accelerate · <b>S / ↓</b> brake and reverse</li>
           <li><b>A / ←</b> and <b>D / →</b> steer</li>
-          <li><b>Space</b> handbrake · <b>R</b> reset the car · <b>C</b> switch camera</li>
+          <li><b>Space</b> handbrake · <b>R</b> reset the car</li>
+          <li><b>C</b> cycles the camera: follow, overhead, and a chase view that sits behind the car</li>
           <li><b>Scroll</b> (or pinch, or <b>+</b> / <b>&minus;</b>) to zoom the camera out over the map</li>
           <li><b>E</b> or <b>Enter</b> opens whatever you are parked next to</li>
           <li>A gamepad works too — left stick and triggers</li>

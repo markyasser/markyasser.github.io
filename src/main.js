@@ -15,11 +15,28 @@ const SPAWN = new THREE.Vector3(0, 1.6, 34)
 const SPAWN_HEADING = Math.PI
 
 // Chase / wide / overhead. Offsets are in the car's local frame.
+/**
+ * Camera modes.
+ *
+ * The default is deliberately NOT a chase camera. A chase camera sits behind the
+ * car and swings around as it turns, which makes the world spin around a
+ * stationary vehicle — the third-person-shooter feel. Holding the camera at a
+ * fixed angle on the world instead keeps the map still and lets the car drive
+ * around inside it, which is what makes a scene like this read as a place
+ * rather than a corridor.
+ *
+ * `fixed: true` means the offset is a world-space vector that never rotates
+ * with the car. `lead` shifts the framing along the car's velocity so you see
+ * where you are going without the view ever turning.
+ */
 const CAMERA_MODES = [
+  { name: 'follow', fixed: true, offset: new THREE.Vector3(0, 17, 20), lead: 0.55, damp: 4.2 },
+  { name: 'overhead', fixed: true, offset: new THREE.Vector3(0, 34, 7), lead: 0.45, damp: 5 },
   { name: 'chase', offset: new THREE.Vector3(0, 7.6, -14), lookAhead: 8, damp: 3.6 },
-  { name: 'wide', offset: new THREE.Vector3(0, 13.5, -22), lookAhead: 11, damp: 2.4 },
-  { name: 'overhead', offset: new THREE.Vector3(0, 32, -9), lookAhead: 4, damp: 5 },
 ]
+
+// How far ahead of the car the fixed camera is allowed to look, in metres.
+const MAX_LEAD = 7
 
 /**
  * Vertical FOV that keeps a sensible horizontal view on any shape of screen.
@@ -38,12 +55,17 @@ class App {
     this.elapsed = 0
     this.running = false
     this.cameraMode = 0
+    // Exposed so the camera framing can be tuned live from the console.
+    this.cameraModes = CAMERA_MODES
     this.frameTimes = []
     this.qualityScale = 1
 
     // Scratch objects reused every frame by the camera logic.
     this._pivot = new THREE.Vector3()
     this._camDir = new THREE.Vector3()
+    this._desired = new THREE.Vector3()
+    this._target = new THREE.Vector3()
+    this._lead = new THREE.Vector3()
     this._ray = new CANNON.Ray()
     this._rayFrom = new CANNON.Vec3()
     this._rayTo = new CANNON.Vec3()
@@ -347,35 +369,46 @@ class App {
     if (!this.car) return
 
     const carPos = this.car.position
-    // Use the chassis yaw only, so barrel rolls don't spin the camera.
-    const forward = this.car.forward().setY(0)
-    if (forward.lengthSq() < 1e-4) forward.set(0, 0, 1)
-    forward.normalize()
-
-    // Zoom scales how far back and how high the camera sits, so the player can
-    // trade a close driving view for an overview of the map.
     const zoom = this.controls.zoom
-    const desired = new THREE.Vector3()
-      .copy(carPos)
-      .addScaledVector(forward, mode.offset.z * zoom)
-      .add(new THREE.Vector3(0, mode.offset.y * zoom, 0))
+    const desired = this._desired
+    const target = this._target
 
-    // Pull the camera up a little at speed for a sense of momentum.
-    desired.y += Math.min(2.4, this.car.speed * 0.07)
+    if (mode.fixed) {
+      // World-space offset: the view direction is constant, so the map never
+      // rotates. Only the camera's position tracks the car.
+      desired.copy(carPos).addScaledVector(mode.offset, zoom)
+
+      // Shift the whole framing along the direction of travel, so the car sits
+      // towards the trailing edge of the view rather than dead centre.
+      const v = this.car.chassisBody.velocity
+      const lead = this._lead.set(v.x, 0, v.z).multiplyScalar(mode.lead)
+      if (lead.lengthSq() > MAX_LEAD * MAX_LEAD) lead.setLength(MAX_LEAD)
+      desired.add(lead)
+
+      // Aim above the car so the view leans into what is ahead rather than
+      // filling the lower half with ground the player has already crossed.
+      target.copy(carPos).add(lead).setY(carPos.y + 2.2)
+    } else {
+      // Chase: offset is rotated into the car's frame, so it trails the car.
+      const forward = this.car.forward().setY(0)
+      if (forward.lengthSq() < 1e-4) forward.set(0, 0, 1)
+      forward.normalize()
+
+      desired.copy(carPos).addScaledVector(forward, mode.offset.z * zoom)
+      // Rise a little at speed, for a sense of momentum.
+      desired.y = carPos.y + mode.offset.y * zoom + Math.min(2.4, this.car.speed * 0.07)
+
+      target.copy(carPos).addScaledVector(forward, mode.lookAhead).setY(carPos.y + 1.6)
+    }
 
     const pivot = this._pivot.copy(carPos).setY(carPos.y + 1.5)
-    this._avoidClipping(pivot, desired)
+    const blocker = this._avoidClipping(pivot, desired)
+    this.worldRefs.updateOcclusion(blocker, dt)
 
-    const alpha = 1 - Math.exp(-mode.damp * dt)
-    this.camera.position.lerp(desired, alpha)
+    this.camera.position.lerp(desired, 1 - Math.exp(-mode.damp * dt))
 
     // Keep the camera above ground even on steep ramps.
     if (this.camera.position.y < 1.6) this.camera.position.y = 1.6
-
-    const target = new THREE.Vector3()
-      .copy(carPos)
-      .addScaledVector(forward, mode.lookAhead)
-      .add(new THREE.Vector3(0, 1.6, 0))
 
     if (!this._lookAt) this._lookAt = target.clone()
     this._lookAt.lerp(target, 1 - Math.exp(-mode.damp * 1.4 * dt))
@@ -393,14 +426,17 @@ class App {
   }
 
   /**
-   * Pull the camera in if a building, sign or ramp sits between it and the car.
-   * `desired` is adjusted in place. Only static geometry is tested, so driving
-   * past a barrel doesn't yank the view.
+   * Resolve anything standing between the camera and the car. Structures that
+   * can fade do so and the camera holds its framing; anything else (a hedge, a
+   * ramp) pulls the camera in instead. `desired` is adjusted in place.
+   *
+   * Only static geometry is tested, so driving past a barrel doesn't yank the
+   * view. Returns the body that was struck, or null.
    */
   _avoidClipping(pivot, desired) {
     const dir = this._camDir.copy(desired).sub(pivot)
     const dist = dir.length()
-    if (dist < 0.05) return
+    if (dist < 0.05) return null
     dir.divideScalar(dist)
 
     this._rayFrom.set(pivot.x, pivot.y, pivot.z)
@@ -414,15 +450,19 @@ class App {
       collisionFilterMask: STATIC_GROUP,
       skipBackfaces: false,
     })
-    if (!this._rayHit.hasHit) return
+    if (!this._rayHit.hasHit) return null
+
+    const body = this._rayHit.body
+    if (this.worldRefs.canFade(body)) return body
 
     const hit = this._rayHit.hitPointWorld
     const hitDist = Math.hypot(hit.x - pivot.x, hit.y - pivot.y, hit.z - pivot.z)
     const safe = Math.max(4.6, hitDist - 0.8)
-    if (safe >= dist) return
+    if (safe >= dist) return body
     desired.copy(pivot).addScaledVector(dir, safe)
     // Close in, look down over the car rather than sitting at bumper height.
     desired.y = Math.max(desired.y, pivot.y + 2.4)
+    return body
   }
 
   _followSun() {
