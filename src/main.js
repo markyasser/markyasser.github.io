@@ -36,9 +36,9 @@ const SPAWN_HEADING = Math.PI
  * where you are going without the view ever turning.
  */
 const CAMERA_MODES = [
-  { name: 'follow', fixed: true, offset: new THREE.Vector3(0, 20.5, 24), lead: 0.55, damp: 4.2 },
-  { name: 'overhead', fixed: true, offset: new THREE.Vector3(0, 41, 8.5), lead: 0.45, damp: 5 },
-  { name: 'chase', offset: new THREE.Vector3(0, 9.1, -16.8), lookAhead: 8, damp: 3.6 },
+  { name: 'follow', fixed: true, offset: new THREE.Vector3(0, 18, 21.1), lead: 0.55, damp: 4.2 },
+  { name: 'overhead', fixed: true, offset: new THREE.Vector3(0, 36, 7.5), lead: 0.45, damp: 5 },
+  { name: 'chase', offset: new THREE.Vector3(0, 8, -14.8), lookAhead: 8, damp: 3.6 },
 ]
 
 // How far ahead of the car the fixed camera is allowed to look, in metres.
