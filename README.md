@@ -99,11 +99,17 @@ neutral tile, so a new skill in `data.js` never renders broken.
 
 Marks appear in three places:
 
-- **Crates** — the mark large, the skill name captioned under it, on a crate
-  painted that technology's own colour.
-- **Container roofs** — a row of marks with names, which is what the overhead
-  camera actually reads.
-- **Container sides** — the employer or platform mark beside the title.
+- **Crates** — the mark large, one small caption under it, on a crate painted
+  that technology's own colour.
+- **Container roofs** — a row of marks, which is what the overhead camera
+  actually reads. No captions: naming each mark here as well turns the roof into
+  a paragraph seen from above.
+- **Container sides** — the employer or platform mark beside the name, and at
+  most one short line under it.
+
+Copy on the props is deliberately thin. A container identifies itself and
+nothing more; the role, the dates, the bullet points and the full skill lists
+all live in the panel that opens on **E**.
 
 ## The camera
 

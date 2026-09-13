@@ -125,11 +125,11 @@ class App {
     // to muddy violet on every surface it touches. All the warmth in this world
     // comes from the horizon band of the sky and from things that are actually
     // emitting light — windows, street lamps, shards.
-    this.scene.add(new THREE.HemisphereLight(0x8dbcf0, 0x22374f, 2.7))
-    this.scene.add(new THREE.AmbientLight(0x5480bd, 0.7))
+    this.scene.add(new THREE.HemisphereLight(0x8dbcf0, 0x22374f, 3.1))
+    this.scene.add(new THREE.AmbientLight(0x5480bd, 0.85))
 
     // Cool and soft: present only to give shapes a readable shadow.
-    const sun = new THREE.DirectionalLight(0xbcd8f5, 1.15)
+    const sun = new THREE.DirectionalLight(0xbcd8f5, 1.35)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     sun.shadow.camera.near = 1
@@ -160,7 +160,7 @@ class App {
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
 
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.62, 0.5, 0.72)
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.34, 0.45, 0.85)
     this.composer.addPass(this.bloom)
     // OutputPass applies the renderer's tone mapping and output colour space,
     // which RenderPass alone would skip.

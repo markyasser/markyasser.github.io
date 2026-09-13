@@ -55,7 +55,7 @@ export function crate({ texture, size = 1.5 }) {
     map: texture,
     emissive: 0xffffff,
     emissiveMap: texture,
-    emissiveIntensity: 0.28,
+    emissiveIntensity: 0.12,
     roughness: 0.8,
     metalness: 0,
   })
@@ -209,10 +209,10 @@ export function cylinderBody({ world, radius, height, position, mass = 0, materi
  */
 export function container({ side, top, end, length, height, width, accent }) {
   const sideMat = new THREE.MeshStandardMaterial({
-    map: side, emissive: 0xffffff, emissiveMap: side, emissiveIntensity: 0.34, roughness: 0.7, metalness: 0.12,
+    map: side, emissive: 0xffffff, emissiveMap: side, emissiveIntensity: 0.12, roughness: 0.7, metalness: 0.12,
   })
   const topMat = new THREE.MeshStandardMaterial({
-    map: top, emissive: 0xffffff, emissiveMap: top, emissiveIntensity: 0.34, roughness: 0.7, metalness: 0.12,
+    map: top, emissive: 0xffffff, emissiveMap: top, emissiveIntensity: 0.12, roughness: 0.7, metalness: 0.12,
   })
   const endMat = new THREE.MeshStandardMaterial({ map: end, roughness: 0.75, metalness: 0.12 })
   const floorMat = std(0x1a2536, { roughness: 0.9 })
@@ -251,7 +251,7 @@ export function bannerFlag({ texture, poleHeight = 5.2, bannerW = 2.6, bannerH =
     map: texture,
     emissive: 0xffffff,
     emissiveMap: texture,
-    emissiveIntensity: 0.45,
+    emissiveIntensity: 0.18,
     roughness: 0.85,
     side: THREE.DoubleSide,
   })

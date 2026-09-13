@@ -200,11 +200,11 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
    */
   function addContainer({
     x, z, rotY = 0, length = 9, height = 3, width = 3,
-    mass = 180, title, sub = '', meta = '', items = [], marks = false, org = '', color, accent,
+    mass = 180, title, meta = '', items = [], marks = false, org = '', color, accent,
   }) {
     const hexColor = hex(color)
     const group = P.container({
-      side: containerSideTexture(renderer, { title, sub, meta, org, color: hexColor }),
+      side: containerSideTexture(renderer, { title, meta, org, color: hexColor }),
       top: containerTopTexture(renderer, { title, items, marks, org, color: hexColor }),
       end: containerEndTexture(renderer, { color: hexColor }),
       length, height, width, accent,
@@ -259,9 +259,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const name = addContainer({
       x: 0, z: -13, length: 15, height: 3.6, width: 3.4, mass: 260,
       title: PROFILE.short,
-      sub: PROFILE.title,
-      meta: PROFILE.tagline,
-      items: [PROFILE.location],
+      meta: PROFILE.title,
       color: C.navyLight,
       accent: C.coral,
     })
@@ -303,7 +301,6 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const main = addContainer({
       x, z, rotY, length: 11, height: 3.2, width: 3.2, mass: 150,
       title: job.company,
-      sub: job.role,
       meta: job.period,
       org: job.logo,
       items: job.tags.slice(0, 4),
@@ -352,7 +349,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       const size = 3.4
       const tex = statTexture(renderer, { ...stat, accent: accents[i % accents.length] })
       const mat = new THREE.MeshStandardMaterial({
-        map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4, roughness: 0.8,
+        map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.14, roughness: 0.8,
       })
       const mesh = P.meshOf(new RoundedBoxGeometry(size, size, size, 3, 0.12), mat)
       mesh.position.set(x, size / 2, z)
@@ -452,18 +449,15 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const main = addContainer({
       x: cx, z: cz, rotY: 0, length: 13, height: 3.4, width: 3.2, mass: 170,
       title: EDUCATION.school,
-      sub: EDUCATION.degree,
       meta: EDUCATION.period,
       org: 'cairo',
-      items: [EDUCATION.grade],
       color: C.violet,
       accent: C.navy,
     })
 
     addContainer({
       x: cx + 2, z: cz - 8, rotY: 0, length: 9, height: 2.4, width: 2.6, mass: 80,
-      title: 'Honours',
-      items: [EDUCATION.grade, 'Teaching Assistant 2025'],
+      title: EDUCATION.grade,
       color: C.navyLight,
       accent: C.violet,
     })
@@ -525,9 +519,8 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
       const main = addContainer({
         x, z: cz - 4, rotY: 0, length: 10, height: 3, width: 3, mass: 130,
         title: link.label,
-        sub: link.sub,
+        meta: link.sub,
         org: link.id === 'email' ? 'email' : link.id,
-        items: [link.sub],
         color,
         accent: C.navy,
       })
@@ -697,7 +690,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     }), 40)
     const bulb = breakables.pool('bulb', () => ({
       geometry: new THREE.SphereGeometry(0.26, 10, 8),
-      material: P.std(0xfff3cf, { emissive: 0xffd79a, emissiveIntensity: 3.2, roughness: 0.3 }),
+      material: P.std(0xfff3cf, { emissive: 0xffd79a, emissiveIntensity: 2.0, roughness: 0.3 }),
     }), 40)
 
     const leafShades = [0x5f9e52, 0x6fae5e, 0x54904a]
@@ -875,7 +868,7 @@ export function buildWorld({ scene, world, renderer, materials, onBreak }) {
     const shardMat = new THREE.MeshStandardMaterial({
       color: 0xfff0b8,
       emissive: 0xf5b942,
-      emissiveIntensity: 2.8,
+      emissiveIntensity: 1.9,
       roughness: 0.2,
       metalness: 0.4,
     })

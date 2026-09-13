@@ -88,24 +88,25 @@ export function crateTexture(renderer, { label, color }) {
   // A dark disc behind the mark, so a pale logo survives a pale crate.
   ctx.fillStyle = 'rgba(11,21,38,0.55)'
   ctx.beginPath()
-  ctx.arc(size / 2, size * 0.42, size * 0.29, 0, Math.PI * 2)
+  ctx.arc(size / 2, size * 0.44, size * 0.34, 0, Math.PI * 2)
   ctx.fill()
 
-  const markSize = size * 0.42
-  drawMark(ctx, markKey(label), (size - markSize) / 2, size * 0.42 - markSize / 2, markSize)
+  const markSize = size * 0.52
+  drawMark(ctx, markKey(label), (size - markSize) / 2, size * 0.44 - markSize / 2, markSize)
 
+  // One small caption, for the marks that aren't self-evident.
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const { size: fs, lines } = fitLines(ctx, label, size * 0.86, 62, 800, 2)
-  ctx.font = `800 ${fs}px ${FONT_STACK}`
-  let y = size * 0.79 - ((lines.length - 1) * fs * 1.1) / 2
-  for (const line of lines) {
-    ctx.fillStyle = 'rgba(0,0,0,0.4)'
-    ctx.fillText(line, size / 2 + 2, y + 3)
-    ctx.fillStyle = '#ffffff'
-    ctx.fillText(line, size / 2, y)
-    y += fs * 1.1
+  let fs = 46
+  ctx.font = `700 ${fs}px ${FONT_STACK}`
+  while (ctx.measureText(label).width > size * 0.86 && fs > 20) {
+    fs -= 2
+    ctx.font = `700 ${fs}px ${FONT_STACK}`
   }
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'
+  ctx.fillText(label, size / 2 + 2, size * 0.88 + 3)
+  ctx.fillStyle = 'rgba(255,255,255,0.94)'
+  ctx.fillText(label, size / 2, size * 0.88)
 
   const tex = finish(canvas, renderer)
   cache.set(key, tex)
@@ -291,9 +292,9 @@ export function skyTexture(top = '#0d1a38', horizon = '#f0a068', mid = '#2b4a80'
  * readable from a moving car.
  */
 export function containerSideTexture(renderer, {
-  title, sub = '', meta = '', org = '', color = '#2f6fa8', width = 1024, height = 420,
+  title, meta = '', org = '', color = '#2f6fa8', width = 1024, height = 420,
 }) {
-  const key = `cside|${title}|${sub}|${meta}|${org}|${color}|${width}x${height}`
+  const key = `cside|${title}|${meta}|${org}|${color}|${width}x${height}`
   if (cache.has(key)) return cache.get(key)
 
   const canvas = makeCanvas(width, height)
@@ -323,38 +324,33 @@ export function containerSideTexture(renderer, {
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const hasSub = Boolean(sub || meta)
 
-  // An org mark sits at the left of the plate; the type shifts right to clear it.
+  // The mark carries the identification; the words are kept to a name and, at
+  // most, a date. Everything else is in the panel that opens on E.
   let textCentre = width / 2
   let inner = width * 0.84
   if (org) {
-    const markSize = plateH * 0.72
-    drawOrgMark(ctx, org, width * 0.08, plateY + (plateH - markSize) / 2, markSize)
-    const used = width * 0.08 + markSize
+    const markSize = plateH * 0.78
+    drawOrgMark(ctx, org, width * 0.075, plateY + (plateH - markSize) / 2, markSize)
+    const used = width * 0.075 + markSize + width * 0.03
     textCentre = used + (width * 0.955 - used) / 2
-    inner = (width * 0.955 - used) * 0.92
+    inner = (width * 0.955 - used) * 0.94
   }
 
-  const tf = fitLines(ctx, title, inner, Math.round(height * (hasSub ? 0.3 : 0.4)), 800, 1)
+  const titleY = meta ? plateY + plateH * 0.42 : plateY + plateH * 0.5
+  const tf = fitLines(ctx, title, inner, Math.round(height * (meta ? 0.3 : 0.34)), 800, 1)
   ctx.font = `800 ${tf.size}px ${FONT_STACK}`
   ctx.letterSpacing = '2px'
   ctx.fillStyle = '#eef4ff'
-  ctx.fillText(title, textCentre, plateY + (hasSub ? plateH * 0.36 : plateH * 0.5))
+  ctx.fillText(title, textCentre, titleY)
   ctx.letterSpacing = '0px'
 
-  if (sub) {
-    const sf = fitLines(ctx, sub, inner, Math.round(height * 0.11), 600, 1)
-    ctx.font = `600 ${sf.size}px ${FONT_STACK}`
-    ctx.fillStyle = 'rgba(226,236,255,0.78)'
-    ctx.fillText(sub, textCentre, plateY + plateH * 0.64)
-  }
   if (meta) {
-    const mf = fitLines(ctx, meta.toUpperCase(), inner, Math.round(height * 0.085), 700, 1)
+    const mf = fitLines(ctx, meta.toUpperCase(), inner, Math.round(height * 0.09), 700, 1)
     ctx.font = `700 ${mf.size}px ${FONT_STACK}`
     ctx.letterSpacing = '3px'
     ctx.fillStyle = 'rgba(226,236,255,0.5)'
-    ctx.fillText(meta.toUpperCase(), textCentre, plateY + plateH * 0.85)
+    ctx.fillText(meta.toUpperCase(), textCentre, plateY + plateH * 0.74)
     ctx.letterSpacing = '0px'
   }
 
@@ -388,71 +384,49 @@ export function containerTopTexture(renderer, {
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  let inner = width * 0.86
-  let centre = width / 2
-
-  // The roof is the face the overhead camera reads, so the org mark belongs
-  // here too, not only on the sides.
-  if (org && !(marks && items.length)) {
-    const markSize = height * 0.5
-    drawOrgMark(ctx, org, width * 0.08, (height - markSize) / 2, markSize)
-    const used = width * 0.08 + markSize
-    centre = used + (width * 0.94 - used) / 2
-    inner = (width * 0.94 - used) * 0.9
-  }
 
   if (marks && items.length) {
-    // The roof is what the overhead camera reads, so it gets the marks in a row
-    // with their names under them.
-    const tf = fitLines(ctx, title, inner, Math.round(height * 0.22), 800, 1)
+    // The roof is what the overhead camera reads. Marks only — naming each one
+    // here as well turns the roof into a paragraph seen from above.
+    const tf = fitLines(ctx, title, width * 0.86, Math.round(height * 0.24), 800, 1)
     ctx.font = `800 ${tf.size}px ${FONT_STACK}`
     ctx.fillStyle = '#eef4ff'
-    ctx.fillText(title, width / 2, height * 0.19)
+    ctx.fillText(title, width / 2, height * 0.25)
 
-    const n = items.length
-    const slot = inner / n
-    const markSize = Math.min(slot * 0.62, height * 0.34)
-    const rowY = height * 0.5
+    const slot = (width * 0.86) / items.length
+    const markSize = Math.min(slot * 0.82, height * 0.42)
+    const rowY = height * 0.64
     items.forEach((item, i) => {
       const cx = width * 0.07 + slot * (i + 0.5)
       ctx.fillStyle = 'rgba(11,21,38,0.5)'
       ctx.beginPath()
-      ctx.arc(cx, rowY, markSize * 0.68, 0, Math.PI * 2)
+      ctx.arc(cx, rowY, markSize * 0.66, 0, Math.PI * 2)
       ctx.fill()
       drawMark(ctx, markKey(item), cx - markSize / 2, rowY - markSize / 2, markSize)
-
-      let fs = Math.min(slot * 0.19, height * 0.075)
-      ctx.font = `600 ${fs}px ${FONT_STACK}`
-      while (ctx.measureText(item).width > slot * 0.96 && fs > 10) {
-        fs -= 1
-        ctx.font = `600 ${fs}px ${FONT_STACK}`
-      }
-      ctx.fillStyle = 'rgba(226,236,255,0.82)'
-      ctx.fillText(item, cx, rowY + markSize * 0.68 + fs * 0.9)
     })
-  } else if (items.length) {
-    const tf = fitLines(ctx, title, inner, Math.round(height * 0.26), 800, 1)
-    ctx.font = `800 ${tf.size}px ${FONT_STACK}`
-    ctx.fillStyle = '#eef4ff'
-    ctx.fillText(title, centre, height * 0.34)
+    const tex = finish(canvas, renderer)
+    cache.set(key, tex)
+    return tex
+  }
 
-    const lf = fitLines(ctx, items.join('   ·   '), inner, Math.round(height * 0.12), 600, 2)
-    ctx.font = `600 ${lf.size}px ${FONT_STACK}`
-    ctx.fillStyle = 'rgba(226,236,255,0.76)'
-    let y = height * 0.6
-    for (const l of lf.lines) {
-      ctx.fillText(l, centre, y)
-      y += lf.size * 1.3
-    }
-  } else {
-    const tf = fitLines(ctx, title, inner, Math.round(height * 0.38), 800, 2)
-    ctx.font = `800 ${tf.size}px ${FONT_STACK}`
-    ctx.fillStyle = '#eef4ff'
-    let y = height / 2 - ((tf.lines.length - 1) * tf.size * 1.1) / 2
-    for (const l of tf.lines) {
-      ctx.fillText(l, centre, y)
-      y += tf.size * 1.1
-    }
+  // Otherwise: the mark and the name, nothing else.
+  let centre = width / 2
+  let inner = width * 0.86
+  if (org) {
+    const markSize = height * 0.56
+    drawOrgMark(ctx, org, width * 0.075, (height - markSize) / 2, markSize)
+    const used = width * 0.075 + markSize + width * 0.03
+    centre = used + (width * 0.94 - used) / 2
+    inner = (width * 0.94 - used) * 0.92
+  }
+
+  const tf = fitLines(ctx, title, inner, Math.round(height * 0.36), 800, 2)
+  ctx.font = `800 ${tf.size}px ${FONT_STACK}`
+  ctx.fillStyle = '#eef4ff'
+  let y = height / 2 - ((tf.lines.length - 1) * tf.size * 1.1) / 2
+  for (const line of tf.lines) {
+    ctx.fillText(line, centre, y)
+    y += tf.size * 1.1
   }
 
   const tex = finish(canvas, renderer)
